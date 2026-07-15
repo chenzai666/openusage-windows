@@ -1,49 +1,49 @@
 # OpenUsage for Windows
 
-Track your AI coding subscriptions from the Windows system tray.
+在 Windows 系统托盘中追踪你的 AI 编程订阅用量。
 
-This is a **Windows port** of [OpenUsage](https://github.com/robinebers/openusage) (based on the open-source Tauri edition). It shows how much of your AI coding plans you've used — session and weekly limits, credits, and spend — in one panel next to the tray icon.
+这是 [OpenUsage](https://github.com/robinebers/openusage) 的 **Windows 移植版**（基于开源 Tauri 版本）。可在托盘旁的面板中查看各 AI 编程套餐的用量：会话/周限额、额度与花费等。
 
-> Upstream: [robinebers/openusage](https://github.com/robinebers/openusage) (macOS-first; current native Swift app on `main`, Tauri legacy on `tauri-legacy`).
+> 上游项目：[robinebers/openusage](https://github.com/robinebers/openusage)（以 macOS 为主；`main` 为原生 Swift 版，`tauri-legacy` 为 Tauri 旧版）。
 
-![OpenUsage Screenshot](screenshot.png)
+![OpenUsage 截图](screenshot.png)
 
-## Features
+## 功能
 
-- **System tray app** — click the tray icon to open the usage panel
-- **Provider plugins** — Claude, Codex, Cursor, Copilot, Grok, and more
-- **Local credentials** — reuses logins already on your machine (auth files under your user profile)
-- **Local HTTP API** — `127.0.0.1:6736` for other tools and agents
-- **Proxy support** — SOCKS5 / HTTP via `~/.openusage/config.json`
-- **Global shortcut** — toggle the panel from anywhere
-- **Auto-start** — optional launch at login
+- **系统托盘应用** — 点击托盘图标打开用量面板
+- **提供商插件** — 支持 Claude、Codex、Cursor、Copilot、Grok 等
+- **复用本机登录** — 读取用户目录下已有的认证文件，无需重复登录
+- **本地 HTTP API** — `127.0.0.1:6736`，供其他工具与 Agent 读取
+- **代理支持** — 通过 `~/.openusage/config.json` 配置 SOCKS5 / HTTP 代理
+- **全局快捷键** — 可在任意界面切换面板显示
+- **开机启动** — 可选登录后自动启动
 
-## Supported providers
+## 支持的提供商
 
-Most providers work on Windows when you are signed into the corresponding CLI or app:
+在 Windows 上，多数提供商在你已登录对应 CLI 或应用后即可使用：
 
-| Provider | Credentials |
+| 提供商 | 凭据来源 |
 |---|---|
-| Claude | `~/.claude/.credentials.json` or `CLAUDE_CODE_OAUTH_TOKEN` |
-| Codex | Codex CLI auth under `%USERPROFILE%\.codex` / `$CODEX_HOME` |
-| Cursor | Cursor app local state (when present) |
-| Copilot | GitHub / Copilot auth on this machine |
-| Grok | `~/.grok/auth.json` after `grok login` |
-| OpenCode Go, Z.ai, Amp, Kimi, MiniMax, … | Same plugin logic as upstream |
+| Claude | `~/.claude/.credentials.json` 或环境变量 `CLAUDE_CODE_OAUTH_TOKEN` |
+| Codex | Codex CLI 认证目录 `%USERPROFILE%\.codex` / `$CODEX_HOME` |
+| Cursor | Cursor 应用本地状态（若存在） |
+| Copilot | 本机 GitHub / Copilot 登录 |
+| Grok | 执行 `grok login` 后的 `~/.grok/auth.json` |
+| OpenCode Go、Z.ai、Amp、Kimi、MiniMax 等 | 与上游相同的插件逻辑 |
 
-macOS Keychain-only logins are not available on Windows; use the CLI file-based login for those tools.
+仅依赖 macOS 钥匙串（Keychain）的登录在 Windows 上不可用；请改用对应 CLI 的文件式登录。
 
-## Install (from source)
+## 从源码安装
 
-### Requirements
+### 环境要求
 
 - Windows 10/11
 - [Node.js](https://nodejs.org/) 20+
-- [Rust](https://rustup.rs/) (MSVC toolchain)
-- Visual Studio Build Tools with “Desktop development with C++”
-- WebView2 (usually preinstalled on Windows 11; bootstrapper is used if missing)
+- [Rust](https://rustup.rs/)（MSVC 工具链）
+- 带「使用 C++ 的桌面开发」工作负载的 Visual Studio Build Tools
+- WebView2（Windows 11 通常已预装；缺失时会走引导安装）
 
-### Build
+### 构建
 
 ```powershell
 git clone https://github.com/chenzai666/openusage-windows.git
@@ -53,25 +53,25 @@ npm run bundle:plugins
 npm run tauri:build
 ```
 
-Installer output:
+安装包输出位置：
 
 - `src-tauri\target\release\bundle\nsis\*.exe`
 - `src-tauri\target\release\bundle\msi\*.msi`
 
-### Dev
+### 开发模式
 
 ```powershell
 npm install
 npm run tauri:dev
 ```
 
-## Usage
+## 使用方法
 
-1. Sign into your AI CLIs/apps (Claude Code, Codex, Cursor, Grok, …).
-2. Launch OpenUsage — it appears in the system tray.
-3. Left-click the tray icon to open the dashboard; right-click for the menu (Settings, Quit, …).
+1. 先登录你的 AI CLI/应用（Claude Code、Codex、Cursor、Grok 等）。
+2. 启动 OpenUsage — 图标会出现在系统托盘。
+3. **左键**点击托盘图标打开仪表盘；**右键**打开菜单（设置、退出等）。
 
-Optional proxy config (`%USERPROFILE%\.openusage\config.json`):
+可选代理配置（`%USERPROFILE%\.openusage\config.json`）：
 
 ```json
 {
@@ -79,30 +79,30 @@ Optional proxy config (`%USERPROFILE%\.openusage\config.json`):
 }
 ```
 
-Local API (loopback only):
+本地 API（仅本机回环）：
 
 ```text
 GET http://127.0.0.1:6736/v1/usage
 ```
 
-## Architecture
+## 架构
 
-- **Frontend:** React + TypeScript + Vite + Tailwind (panel UI)
-- **Backend:** Rust + Tauri 2 (tray, plugins, local HTTP API)
-- **Providers:** JavaScript plugins under `plugins/`, run in an embedded QuickJS host
+- **前端：** React + TypeScript + Vite + Tailwind（面板 UI）
+- **后端：** Rust + Tauri 2（托盘、插件、本地 HTTP API）
+- **提供商：** `plugins/` 下的 JavaScript 插件，在嵌入式 QuickJS 中运行
 
-Windows-specific changes vs upstream Tauri edition:
+相对上游 Tauri 版的 Windows 适配：
 
-- Replaced macOS `NSPanel` with a standard always-on-top tray-adjacent window
-- Disabled macOS-private APIs / App Nap / WebKit tweaks
-- Path expansion supports Windows home paths
-- Bundles NSIS + MSI installers
+- 用标准「始终置顶 + 贴托盘」窗口替代 macOS `NSPanel`
+- 禁用 macOS 私有 API / App Nap / WebKit 相关调整
+- 路径展开支持 Windows 用户主目录
+- 打包 NSIS + MSI 安装程序
 
-## Credits
+## 致谢
 
-- Original project by [Robin Ebers](https://github.com/robinebers) — [openusage](https://github.com/robinebers/openusage)
-- Inspired by [CodexBar](https://github.com/steipete/CodexBar)
+- 原作者 [Robin Ebers](https://github.com/robinebers) — [openusage](https://github.com/robinebers/openusage)
+- 灵感来源 [CodexBar](https://github.com/steipete/CodexBar)
 
-## License
+## 许可证
 
-[MIT](LICENSE) — same as upstream OpenUsage.
+[MIT](LICENSE) — 与上游 OpenUsage 相同。
