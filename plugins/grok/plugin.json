@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "grok",
+  "version": "0.1.0",
   "name": "Grok",
-  "version": "0.0.1",
   "entry": "plugin.js",
   "icon": "icon.svg",
   "brandColor": "#000000",
@@ -10,7 +10,12 @@
     { "label": "Usage", "url": "https://grok.com/?_s=usage" }
   ],
   "lines": [
-    { "type": "progress", "label": "Credits used", "scope": "overview", "primaryOrder": 1 },
-    { "type": "badge", "label": "Pay as you go", "scope": "detail" }
+    { "type": "progress", "label": "周限额", "scope": "overview", "primaryOrder": 1, "period": "weekly" },
+    { "type": "text", "label": "周期", "scope": "overview" },
+    { "type": "progress", "label": "GrokBuild 使用", "scope": "overview" },
+    { "type": "text", "label": "GrokChat 使用", "scope": "overview" },
+    { "type": "badge", "label": "按量付费", "scope": "overview" },
+    { "type": "progress", "label": "月度额度", "scope": "overview", "primaryOrder": 2 },
+    { "type": "text", "label": "月度用量", "scope": "overview" }
   ]
 }

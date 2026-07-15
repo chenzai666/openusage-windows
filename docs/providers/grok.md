@@ -1,93 +1,67 @@
 # Grok
 
-Tracks Grok Build credit usage from the local Grok CLI login.
+追踪 Grok / SuperGrok 订阅额度（周限额、产品用量、月度额度），登录信息来自本机 Grok CLI。
 
-> Reverse-engineered, undocumented API. May change without notice.
+显示风格对齐 **Cliproxy Plus** 额度卡片：周限额、各产品使用、按量付费、月度额度及重置时间。
 
-## Overview
+> 反向工程的未公开 API，可能随时变更。
 
-- **Protocol:** REST (plain JSON)
-- **Base URL:** `https://cli-chat-proxy.grok.com/v1`
-- **Auth:** cached Grok CLI token from `~/.grok/auth.json`
-- **Refresh:** Grok CLI refresh token from the same file
-- **Usage unit:** raw billing units from Grok
-- **Plan source:** `GET /settings` (`subscription_tier_display`)
-- **Reset period:** billing period from the CLI billing response
+## 概览
 
-## Setup
+- **协议：** REST（JSON）
+- **Base URL：** `https://cli-chat-proxy.grok.com/v1`
+- **认证：** `~/.grok/auth.json` 中的 Grok CLI token
+- **刷新：** 同文件中的 refresh_token
+- **计划名：** `GET /settings` → `subscription_tier_display`
 
-1. Install and sign in to the Grok CLI:
+## 设置
+
+1. 安装并登录 Grok CLI：
 
 ```bash
 grok login
 ```
 
-2. Enable the Grok plugin in OpenUsage settings.
+2. 在 OpenUsage 设置中启用 Grok 插件。
 
-OpenUsage reads the same local auth file that the Grok CLI uses. Access tokens are refreshed automatically before expiry when a `refresh_token` is present. If refresh fails, run `grok login` again.
+## 接口
 
-## Endpoint
+### GET /billing?format=credits（周限额 / 产品拆分）
 
-### GET /billing
+统一计费账号返回：
 
-Returns the current Grok Build billing period, credit usage, and pay-as-you-go cap.
+| 字段 | 含义 |
+|------|------|
+| `currentPeriod` | 周期类型（周）、起止时间 |
+| `creditUsagePercent` | 周共享池已用百分比 |
+| `productUsage[]` | GrokBuild / GrokChat 等分产品占比 |
+| `onDemandCap` | 按量付费上限（0 = 未启用） |
+| `isUnifiedBillingUser` | 是否已迁移到周共享池 |
 
-#### Headers
+### GET /billing（月度额度）
 
-| Header | Required | Value |
-|--------|----------|-------|
-| Authorization | yes | `Bearer <token from ~/.grok/auth.json>` |
-| X-XAI-Token-Auth | yes | `xai-grok-cli` |
-| Accept | yes | `application/json` |
+| 字段 | 含义 |
+|------|------|
+| `used.val` / `monthlyLimit.val` | 月度用量单位（**分**，÷100 = 美元） |
+| `billingPeriodStart` / `End` | 月度账期起止 / 重置时间 |
+| `onDemandCap` | 按量付费上限 |
 
-#### Response
+## 显示行
 
-```json
-{
-  "config": {
-    "monthlyLimit": { "val": 60000 },
-    "used": { "val": 4277 },
-    "onDemandCap": { "val": 0 },
-    "billingPeriodStart": "2026-05-01T00:00:00+00:00",
-    "billingPeriodEnd": "2026-06-01T00:00:00+00:00",
-    "history": [
-      {
-        "billingCycle": { "year": 2026, "month": 4 },
-        "includedUsed": { "val": 0 },
-        "onDemandUsed": { "val": 0 },
-        "totalUsed": { "val": 0 }
-      }
-    ]
-  }
-}
-```
+| 行 | 说明 |
+|----|------|
+| **周限额** | 周共享池已用 %，含重置时间与周期范围 |
+| **周期** | 本周起止（本地时间格式） |
+| **GrokBuild / GrokChat 使用** | 分产品用量（无数据时显示「已用 --」） |
+| **按量付费** | 未启用 / 上限数值 |
+| **月度额度** | 按美元显示的月度已用（progress） |
+| **月度用量** | `$已用 / $上限（%）` 明细 |
 
-### GET /settings
+## 错误
 
-Returns remote CLI settings. OpenUsage reads `subscription_tier_display` from this response and shows it as the provider plan label, for example `SuperGrok Heavy`.
-
-Used fields:
-
-- `used.val` — current billing period usage
-- `monthlyLimit.val` — included credit limit
-- `onDemandCap.val` — pay-as-you-go cap; `0` means disabled
-- `billingPeriodEnd` — current billing period reset time
-
-## Displayed Lines
-
-| Line | Description |
-|------|-------------|
-| Credits used | Percent of included monthly credits used |
-| Pay as you go | Disabled, or the configured pay-as-you-go cap |
-
-## Errors
-
-| Condition | Message |
-|-----------|---------|
-| Missing auth file | "Grok not logged in. Run `grok login`." |
-| Expired token with no refresh token | "Grok auth expired. Run `grok login` again." |
-| Refresh token rejected | "Grok auth expired. Run `grok login` again." |
-| 401/403 after retry | "Grok auth expired. Run `grok login` again." |
-| HTTP error | "Grok billing request failed (HTTP {status}). Try again later." |
-| Network error | "Grok billing request failed. Check your connection." |
-| Invalid response | "Grok billing response changed." |
+| 条件 | 提示 |
+|------|------|
+| 无登录 | `Grok not logged in. Run \`grok login\`.` |
+| 登录过期 | `Grok auth expired. Run \`grok login\` again.` |
+| 网络/HTTP 错误 | `Grok billing request failed...` |
+| 响应结构变化 | `Grok billing response changed.` |

@@ -1,12 +1,23 @@
 (function () {
   const AUTH_PATH = "~/.grok/auth.json"
   const BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing"
+  const BILLING_CREDITS_URL = BILLING_URL + "?format=credits"
   const SETTINGS_URL = "https://cli-chat-proxy.grok.com/v1/settings"
   const REFRESH_URL = "https://auth.x.ai/oauth2/token"
   const DEFAULT_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
   const TOKEN_AUTH_HEADER = "xai-grok-cli"
   const AUTH_REFRESH_BUFFER_MS = 5 * 60 * 1000
   const LOGIN_HINT = "Grok auth expired. Run `grok login` again."
+
+  // Grok CLI billing units are reported in cents ($1.00 = 100).
+  const CENTS_PER_DOLLAR = 100
+
+  const PRODUCT_LABELS = {
+    GrokBuild: "GrokBuild 使用",
+    GrokChat: "GrokChat 使用",
+    GrokImagine: "GrokImagine 使用",
+    GrokVoice: "GrokVoice 使用",
+  }
 
   function readJson(ctx, path) {
     if (!ctx.host.fs.exists(path)) return null
@@ -191,17 +202,21 @@
     return n
   }
 
-  function fetchBillingResponse(ctx, token) {
+  function billingHeaders(token) {
+    return {
+      Authorization: "Bearer " + token,
+      "X-XAI-Token-Auth": TOKEN_AUTH_HEADER,
+      Accept: "application/json",
+      "User-Agent": "OpenUsage",
+    }
+  }
+
+  function fetchBilling(ctx, token, url) {
     try {
       return ctx.util.request({
         method: "GET",
-        url: BILLING_URL,
-        headers: {
-          Authorization: "Bearer " + token,
-          "X-XAI-Token-Auth": TOKEN_AUTH_HEADER,
-          Accept: "application/json",
-          "User-Agent": "OpenUsage",
-        },
+        url: url,
+        headers: billingHeaders(token),
         timeoutMs: 10000,
       })
     } catch {
@@ -229,12 +244,7 @@
       const resp = ctx.util.request({
         method: "GET",
         url: SETTINGS_URL,
-        headers: {
-          Authorization: "Bearer " + token,
-          "X-XAI-Token-Auth": TOKEN_AUTH_HEADER,
-          Accept: "application/json",
-          "User-Agent": "OpenUsage",
-        },
+        headers: billingHeaders(token),
         timeoutMs: 10000,
       })
       if (resp.status < 200 || resp.status >= 300) return null
@@ -246,51 +256,240 @@
     }
   }
 
+  function periodDurationMs(startIso, endIso, ctx) {
+    const start = ctx.util.parseDateMs(startIso)
+    const end = ctx.util.parseDateMs(endIso)
+    if (start == null || end == null || end <= start) return undefined
+    return end - start
+  }
+
+  function formatShortRange(ctx, startIso, endIso) {
+    const start = ctx.util.parseDateMs(startIso)
+    const end = ctx.util.parseDateMs(endIso)
+    if (start == null || end == null) return null
+    function fmt(ms) {
+      const d = new Date(ms)
+      const mm = String(d.getMonth() + 1).padStart(2, "0")
+      const dd = String(d.getDate()).padStart(2, "0")
+      const hh = String(d.getHours()).padStart(2, "0")
+      const mi = String(d.getMinutes()).padStart(2, "0")
+      return mm + "/" + dd + " " + hh + ":" + mi
+    }
+    return fmt(start) + " ~ " + fmt(end)
+  }
+
+  function productLabel(product) {
+    if (!product) return "使用量"
+    return PRODUCT_LABELS[product] || (String(product) + " 使用")
+  }
+
+  function buildWeeklyLines(ctx, creditsConfig) {
+    const lines = []
+    if (!creditsConfig || typeof creditsConfig !== "object") return lines
+
+    const period = creditsConfig.currentPeriod
+    const isWeekly =
+      period &&
+      typeof period === "object" &&
+      (period.type === "USAGE_PERIOD_TYPE_WEEKLY" ||
+        creditsConfig.isUnifiedBillingUser === true)
+
+    const usagePercent = Number(creditsConfig.creditUsagePercent)
+    const hasUsage = Number.isFinite(usagePercent)
+    const periodEnd = period && period.end ? period.end : creditsConfig.billingPeriodEnd
+    const periodStart = period && period.start ? period.start : creditsConfig.billingPeriodStart
+    const resetsAt = periodEnd ? ctx.util.toIso(periodEnd) : null
+    const durationMs = periodStart && periodEnd
+      ? periodDurationMs(periodStart, periodEnd, ctx)
+      : undefined
+    const rangeText = periodStart && periodEnd
+      ? formatShortRange(ctx, periodStart, periodEnd)
+      : null
+
+    if (isWeekly && hasUsage && resetsAt) {
+      lines.push(
+        ctx.line.progress({
+          label: "周限额",
+          used: clampPercent(usagePercent),
+          limit: 100,
+          format: { kind: "percent" },
+          resetsAt: resetsAt,
+          periodDurationMs: durationMs,
+          color: "#22c55e",
+        })
+      )
+      if (rangeText) {
+        lines.push(
+          ctx.line.text({
+            label: "周期",
+            value: rangeText,
+          })
+        )
+      }
+    }
+
+    const products = Array.isArray(creditsConfig.productUsage)
+      ? creditsConfig.productUsage
+      : []
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i]
+      if (!p || typeof p !== "object") continue
+      const label = productLabel(p.product)
+      const pct = Number(p.usagePercent)
+      if (Number.isFinite(pct)) {
+        lines.push(
+          ctx.line.progress({
+            label: label,
+            used: clampPercent(pct),
+            limit: 100,
+            format: { kind: "percent" },
+            color: "#22c55e",
+          })
+        )
+      } else {
+        lines.push(
+          ctx.line.text({
+            label: label,
+            value: "已用 --",
+          })
+        )
+      }
+    }
+
+    const onDemandCap = unitsValue(creditsConfig.onDemandCap)
+    if (onDemandCap !== null) {
+      lines.push(
+        ctx.line.badge({
+          label: "按量付费",
+          text: onDemandCap > 0 ? "上限 " + String(onDemandCap) : "未启用",
+          color: onDemandCap > 0 ? "#22c55e" : "#a3a3a3",
+        })
+      )
+    }
+
+    return lines
+  }
+
+  function buildMonthlyLines(ctx, monthlyConfig) {
+    const lines = []
+    if (!monthlyConfig || typeof monthlyConfig !== "object") return lines
+
+    const usedUnits = unitsValue(monthlyConfig.used)
+    const limitUnits = unitsValue(monthlyConfig.monthlyLimit)
+    if (usedUnits === null || limitUnits === null || limitUnits <= 0) return lines
+
+    const usedDollars = usedUnits / CENTS_PER_DOLLAR
+    const limitDollars = limitUnits / CENTS_PER_DOLLAR
+    const usedPercent = clampPercent((usedUnits / limitUnits) * 100)
+
+    const periodStart = monthlyConfig.billingPeriodStart
+    const periodEnd = monthlyConfig.billingPeriodEnd
+    const resetsAt = periodEnd ? ctx.util.toIso(periodEnd) : null
+    if (!resetsAt) return lines
+
+    const durationMs = periodStart
+      ? periodDurationMs(periodStart, periodEnd, ctx)
+      : undefined
+
+    lines.push(
+      ctx.line.progress({
+        label: "月度额度",
+        used: usedDollars,
+        limit: limitDollars,
+        format: { kind: "dollars" },
+        resetsAt: resetsAt,
+        periodDurationMs: durationMs,
+        color: "#22c55e",
+      })
+    )
+
+    // Show explicit $used / $limit as a detail row (Cliproxy Plus style)
+    lines.push(
+      ctx.line.text({
+        label: "月度用量",
+        value:
+          "$" +
+          usedDollars.toFixed(2) +
+          " / $" +
+          limitDollars.toFixed(2) +
+          "（" +
+          Math.round(usedPercent) +
+          "%）",
+      })
+    )
+
+    return lines
+  }
+
   function probe(ctx) {
     const auth = loadAuth(ctx)
-    const billingResp = ctx.util.retryOnceOnAuth({
-      request: (token) => fetchBillingResponse(ctx, token || auth.token),
-      refresh: () => {
-        const refreshed = refreshAuth(ctx, auth.auth, auth.entryKey, auth.entry)
-        if (refreshed) auth.token = refreshed
-        return refreshed
-      },
-    })
-    const data = parseBilling(ctx, billingResp)
-    const config = data && data.config
-    if (!config || typeof config !== "object") {
+
+    function requestWithRetry(url) {
+      return ctx.util.retryOnceOnAuth({
+        request: (token) => fetchBilling(ctx, token || auth.token, url),
+        refresh: () => {
+          const refreshed = refreshAuth(ctx, auth.auth, auth.entryKey, auth.entry)
+          if (refreshed) auth.token = refreshed
+          return refreshed
+        },
+      })
+    }
+
+    // Weekly / product pool (unified billing)
+    let creditsConfig = null
+    try {
+      const creditsResp = requestWithRetry(BILLING_CREDITS_URL)
+      const creditsData = parseBilling(ctx, creditsResp)
+      creditsConfig = creditsData && creditsData.config
+    } catch (e) {
+      // Non-fatal if weekly endpoint fails; monthly may still work
+      if (typeof e === "string" && e === LOGIN_HINT) throw e
+      ctx.host.log.warn("Grok credits billing unavailable: " + String(e))
+    }
+
+    // Monthly included credits (units → dollars)
+    let monthlyConfig = null
+    try {
+      const monthlyResp = requestWithRetry(BILLING_URL)
+      const monthlyData = parseBilling(ctx, monthlyResp)
+      monthlyConfig = monthlyData && monthlyData.config
+    } catch (e) {
+      if (typeof e === "string" && e === LOGIN_HINT) throw e
+      // If we already have weekly data, continue; else rethrow
+      if (!creditsConfig) throw e
+      ctx.host.log.warn("Grok monthly billing unavailable: " + String(e))
+    }
+
+    if (!creditsConfig && !monthlyConfig) {
       throw "Grok billing response changed."
     }
 
-    const usedUnits = unitsValue(config.used)
-    const limitUnits = unitsValue(config.monthlyLimit)
-    const onDemandCapUnits = unitsValue(config.onDemandCap)
-    if (usedUnits === null || limitUnits === null || limitUnits <= 0 || onDemandCapUnits === null) {
+    const lines = []
+    const weeklyLines = buildWeeklyLines(ctx, creditsConfig)
+    for (let i = 0; i < weeklyLines.length; i++) lines.push(weeklyLines[i])
+
+    // Prefer onDemand from credits config; fall back to monthly if weekly missing it
+    if (!weeklyLines.some(function (l) { return l.label === "按量付费" }) && monthlyConfig) {
+      const onDemandCapUnits = unitsValue(monthlyConfig.onDemandCap)
+      if (onDemandCapUnits !== null) {
+        lines.push(
+          ctx.line.badge({
+            label: "按量付费",
+            text: onDemandCapUnits > 0 ? "上限 " + String(onDemandCapUnits) : "未启用",
+            color: onDemandCapUnits > 0 ? "#22c55e" : "#a3a3a3",
+          })
+        )
+      }
+    }
+
+    const monthlyLines = buildMonthlyLines(ctx, monthlyConfig)
+    for (let i = 0; i < monthlyLines.length; i++) lines.push(monthlyLines[i])
+
+    if (lines.length === 0) {
       throw "Grok billing response changed."
     }
 
-    const resetsAt = ctx.util.toIso(config.billingPeriodEnd)
-    if (!resetsAt) {
-      throw "Grok billing response changed."
-    }
-
-    const usedPercent = clampPercent((usedUnits / limitUnits) * 100)
-    const lines = [
-      ctx.line.progress({
-        label: "Credits used",
-        used: usedPercent,
-        limit: 100,
-        format: { kind: "percent" },
-        resetsAt,
-      }),
-      ctx.line.badge({
-        label: "Pay as you go",
-        text: onDemandCapUnits > 0 ? String(onDemandCapUnits) + " cap" : "Disabled",
-        color: onDemandCapUnits > 0 ? "#22c55e" : "#a3a3a3",
-      }),
-    ]
-
-    return { plan: fetchPlanName(ctx, auth.token), lines }
+    return { plan: fetchPlanName(ctx, auth.token), lines: lines }
   }
 
   globalThis.__openusage_plugin = { id: "grok", probe }
