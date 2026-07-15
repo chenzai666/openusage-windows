@@ -89,8 +89,9 @@ describe("SettingsPage", () => {
         onToggle={onToggle}
       />
     )
-    const checkboxes = screen.getAllByRole("checkbox")
-    await userEvent.click(checkboxes[checkboxes.length - 1])
+    // Click the plugin row (not only the checkbox). Base UI checkbox needs
+    // PointerEvent; the row onClick is the stable interaction path.
+    await userEvent.click(screen.getByText("Beta"))
     expect(onToggle).toHaveBeenCalledWith("b")
   })
 

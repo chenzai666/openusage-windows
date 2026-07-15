@@ -10,6 +10,8 @@ const OAUTH_TOKEN_KEY = "antigravityUnifiedStateSync.oauthToken"
 const OAUTH_TOKEN_SENTINEL = "oauthTokenInfoSentinelKey"
 const STATE_DB_V2 = "~/Library/Application Support/Antigravity IDE/User/globalStorage/state.vscdb"
 const STATE_DB_V1 = "~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb"
+const STATE_DB_WIN_V2 = "~/AppData/Roaming/Antigravity IDE/User/globalStorage/state.vscdb"
+const STATE_DB_WIN_V1 = "~/AppData/Roaming/Antigravity/User/globalStorage/state.vscdb"
 const LOGIN_MESSAGE = "Start Antigravity or run `agy` and try again."
 
 // --- Fixtures ---
@@ -611,7 +613,12 @@ describe("antigravity plugin", () => {
     const plugin = await loadPlugin()
     plugin.probe(ctx)
 
-    expect(ctx.host.sqlite.query.mock.calls.map((call) => call[0])).toEqual([STATE_DB_V2, STATE_DB_V1])
+    expect(ctx.host.sqlite.query.mock.calls.map((call) => call[0])).toEqual([
+      STATE_DB_V2,
+      STATE_DB_V1,
+      STATE_DB_WIN_V2,
+      STATE_DB_WIN_V1,
+    ])
     expect(capturedAuths[0]).toBe("Bearer ya29.v2-token")
   })
 
