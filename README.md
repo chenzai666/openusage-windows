@@ -33,6 +33,33 @@
 
 仅依赖 macOS 钥匙串（Keychain）的登录在 Windows 上不可用；请改用对应 CLI 的文件式登录。
 
+## 用 GitHub Actions 构建安装包
+
+**不需要 Docker / Docker Hub。** 工作流在 GitHub 托管的 `windows-latest` 上编译，产出 **NSIS（.exe）** 与 **MSI（.msi）**。
+
+### 方式一：手动触发（只出产物，不发 Release）
+
+1. 打开 [Actions → Publish Windows](https://github.com/chenzai666/openusage-windows/actions/workflows/publish.yml)
+2. 点 **Run workflow** → 选择 `main` → **Run workflow**
+3. 跑完后在本次 run 的 **Artifacts** 下载 `openusage-windows-installers`
+
+```bash
+# 或用 gh CLI
+gh workflow run "Publish Windows" --ref main -f create_release=false
+gh run watch   # 等待完成后在网页 Artifacts 下载
+```
+
+### 方式二：打标签发 GitHub Release
+
+版本号需与 `package.json` / `src-tauri/tauri.conf.json` / `Cargo.toml` 一致（当前为 `0.6.28`）。
+
+```bash
+git tag v0.6.28
+git push origin v0.6.28
+```
+
+推送 `v*` 标签后会自动构建，并把安装包上传到 [Releases](https://github.com/chenzai666/openusage-windows/releases)。
+
 ## 从源码安装
 
 ### 环境要求
