@@ -1,0 +1,21 @@
+﻿# Dependencies
+node_modules/
+.bun/
+
+# Build
+dist/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/resources/bundled_plugins/
+
+# Logs / local
+*.log
+.DS_Store
+Thumbs.db
+.env
+.idea/
+.vscode/
+*.local
+
+# Cargo
+**/Cargo.lock.bak
