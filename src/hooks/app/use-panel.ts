@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { invoke, isTauri } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { getCurrentWindow, PhysicalSize, currentMonitor } from "@tauri-apps/api/window"
+import {
+  getCurrentWindow,
+  PhysicalPosition,
+  PhysicalSize,
+  currentMonitor,
+} from "@tauri-apps/api/window"
 import type { ActiveView } from "@/components/side-nav"
 import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
 
@@ -188,7 +193,28 @@ export function usePanel({
 
       try {
         const currentWindow = getCurrentWindow()
+        // Keep the bottom edge fixed when shrinking/growing so the panel
+        // stays glued to the Windows tray / taskbar after content-size resize.
+        let previousHeight = height
+        try {
+          previousHeight = (await currentWindow.outerSize()).height
+        } catch {
+          // ignore
+        }
+
         await currentWindow.setSize(new PhysicalSize(width, height))
+
+        const delta = previousHeight - height
+        if (delta !== 0) {
+          try {
+            const pos = await currentWindow.outerPosition()
+            await currentWindow.setPosition(
+              new PhysicalPosition(pos.x, pos.y + delta)
+            )
+          } catch {
+            // Positioning is best-effort; size is more important.
+          }
+        }
       } catch (e) {
         console.error("Failed to resize window:", e)
       }

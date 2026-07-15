@@ -124,12 +124,13 @@ pub fn init(app_handle: &tauri::AppHandle) -> tauri::Result<()> {
     let handle = app_handle.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Focused(false) = event {
-            // Small delay so clicks inside the window still register first.
+            // Delay so clicks / drag-start inside the window still register.
+            // Slightly longer than before so data-tauri-drag-region can begin.
             let handle = handle.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(150));
+                std::thread::sleep(std::time::Duration::from_millis(280));
                 if let Some(win) = handle.get_webview_window("main") {
-                    // Only hide if still unfocused (user didn't re-focus).
+                    // Only hide if still unfocused (user didn't re-focus / drag).
                     if !win.is_focused().unwrap_or(true) {
                         let _ = win.hide();
                     }
@@ -249,16 +250,18 @@ pub fn position_panel_at_tray_icon(
         .min(mon_logical_x + mon_logical_w - panel_width - 8.0);
 
     // Windows tray is typically at the bottom of the screen. Prefer placing
-    // the panel above the tray icon; fall back to below if there isn't room.
-    let gap: f64 = 8.0;
+    // the panel just above the tray icon; fall back to below if there isn't room.
+    // Small gap so the panel sits close to the taskbar (frontend re-anchors
+    // after content-size resize so the bottom edge stays put).
+    let gap: f64 = 4.0;
     let above_y = icon_logical_y - panel_height - gap;
     let below_y = icon_logical_y + icon_logical_h + gap;
-    let panel_y = if above_y >= mon_logical_y + 8.0 {
+    let panel_y = if above_y >= mon_logical_y + 4.0 {
         above_y
     } else {
         below_y
-            .min(mon_logical_y + mon_logical_h - panel_height - 8.0)
-            .max(mon_logical_y + 8.0)
+            .min(mon_logical_y + mon_logical_h - panel_height - 4.0)
+            .max(mon_logical_y + 4.0)
     };
 
     let _ = window.set_position(Position::Logical(tauri::LogicalPosition {

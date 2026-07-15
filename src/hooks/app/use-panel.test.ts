@@ -36,6 +36,15 @@ vi.mock("@tauri-apps/api/window", () => ({
       this.height = height
     }
   },
+  PhysicalPosition: class PhysicalPosition {
+    x: number
+    y: number
+
+    constructor(x: number, y: number) {
+      this.x = x
+      this.y = y
+    }
+  },
 }))
 
 import { usePanel } from "@/hooks/app/use-panel"
@@ -52,7 +61,12 @@ describe("usePanel", () => {
     invokeMock.mockResolvedValue(undefined)
     listenMock.mockResolvedValue(vi.fn())
     currentMonitorMock.mockResolvedValue(null)
-    getCurrentWindowMock.mockReturnValue({ setSize: vi.fn().mockResolvedValue(undefined) })
+    getCurrentWindowMock.mockReturnValue({
+      setSize: vi.fn().mockResolvedValue(undefined),
+      setPosition: vi.fn().mockResolvedValue(undefined),
+      outerSize: vi.fn().mockResolvedValue({ width: 400, height: 500 }),
+      outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+    })
   })
 
   it("handles tray show-about event", async () => {

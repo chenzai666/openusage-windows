@@ -70,13 +70,20 @@ export function AppShell({
     <div
       ref={containerRef}
       tabIndex={-1}
-      className="flex flex-col items-center p-6 pt-1.5 bg-transparent outline-none"
+      // Tight transparent padding so Windows doesn't show a huge empty frame.
+      // Card first, arrow below — panel sits just above the taskbar tray.
+      className="flex flex-col items-center px-2 pb-1 pt-0 bg-transparent outline-none"
     >
-      <div className="tray-arrow" />
       <div
         className="relative bg-card rounded-xl overflow-hidden select-none w-full border shadow-lg flex flex-col"
         style={maxPanelHeightPx ? { maxHeight: `${maxPanelHeightPx - ARROW_OVERHEAD_PX}px` } : undefined}
       >
+        {/* Drag handle: grab the top strip to move the panel */}
+        <div
+          data-tauri-drag-region
+          className="h-3 w-full shrink-0 cursor-grab active:cursor-grabbing bg-card dark:bg-muted/50"
+          title="拖动移动窗口"
+        />
         <div className="flex flex-1 min-h-0 flex-row">
           <SideNav
             activeView={activeView}
@@ -86,7 +93,7 @@ export function AppShell({
             isPluginRefreshAvailable={isPluginRefreshAvailable}
             onReorder={onNavReorder}
           />
-          <div className="flex-1 flex flex-col px-3 pt-2 pb-1.5 min-w-0 bg-card dark:bg-muted/50">
+          <div className="flex-1 flex flex-col px-3 pt-1 pb-1.5 min-w-0 bg-card dark:bg-muted/50">
             <div className="relative flex-1 min-h-0">
               <div ref={scrollRef} className="h-full overflow-y-auto scrollbar-none">
                 <AppContent
@@ -114,6 +121,8 @@ export function AppShell({
           </div>
         </div>
       </div>
+      {/* Point down toward the Windows taskbar tray */}
+      <div className="tray-arrow tray-arrow-down" />
     </div>
   )
 }
