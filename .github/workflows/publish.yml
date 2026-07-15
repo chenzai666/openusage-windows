@@ -117,17 +117,27 @@ jobs:
           releaseBody: |
             ## OpenUsage for Windows ${{ env.RELEASE_TAG }}
 
-            Windows system-tray AI usage tracker.
+            Windows 系统托盘 AI 编程订阅用量追踪器（中文界面）。
 
-            ### Downloads
-            - **NSIS installer** (`.exe`) — recommended for most users
-            - **MSI installer** (`.msi`) — for enterprise / silent deploy
+            ### 下载安装
 
-            ### Requirements
-            - Windows 10/11
-            - WebView2 (bootstrapper included if missing)
+            | 文件 | 说明 |
+            |------|------|
+            | **NSIS 安装包**（`.exe`） | 推荐，个人用户 |
+            | **MSI 安装包**（`.msi`） | 企业部署 / 静默安装 |
 
-            Built with GitHub Actions on `windows-latest`.
+            ### 系统要求
+
+            - Windows 10 / 11（x64）
+            - WebView2（缺失时安装包可引导下载，Win11 一般已预装）
+
+            ### 使用说明
+
+            1. 下载并运行安装包
+            2. 先登录 Claude Code / Codex / Cursor / Grok 等 CLI 或客户端
+            3. 从系统托盘打开 OpenUsage 查看用量
+
+            由 GitHub Actions（`windows-latest`）自动构建。
           releaseDraft: false
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           includeUpdaterJson: false
