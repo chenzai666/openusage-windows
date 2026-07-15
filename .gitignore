@@ -19,3 +19,8 @@ Thumbs.db
 
 # Cargo
 **/Cargo.lock.bak
+
+bun.lock
+tmp-screenshot.png
+*.png.tmp
+
