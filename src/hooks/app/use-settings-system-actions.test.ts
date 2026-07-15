@@ -62,12 +62,13 @@ describe("useSettingsSystemActions", () => {
     )
 
     act(() => {
-      result.current.handleAutoUpdateIntervalChange(15)
+      result.current.handleAutoUpdateIntervalChange(900)
     })
 
-    expect(setAutoUpdateInterval).toHaveBeenCalledWith(15)
+    expect(setAutoUpdateInterval).toHaveBeenCalledWith(900)
+    // now=10000 + 900s = 910000
     expect(setAutoUpdateNextAt).toHaveBeenCalledWith(910_000)
-    expect(saveAutoUpdateIntervalMock).toHaveBeenCalledWith(15)
+    expect(saveAutoUpdateIntervalMock).toHaveBeenCalledWith(900)
     nowSpy.mockRestore()
   })
 
@@ -86,7 +87,7 @@ describe("useSettingsSystemActions", () => {
     )
 
     act(() => {
-      result.current.handleAutoUpdateIntervalChange(30)
+      result.current.handleAutoUpdateIntervalChange(1800)
     })
 
     expect(setAutoUpdateNextAt).toHaveBeenCalledWith(null)
@@ -150,7 +151,7 @@ describe("useSettingsSystemActions", () => {
     )
 
     act(() => {
-      result.current.handleAutoUpdateIntervalChange(5)
+      result.current.handleAutoUpdateIntervalChange(300)
       result.current.handleGlobalShortcutChange(null)
       result.current.handleStartOnLoginChange(false)
     })

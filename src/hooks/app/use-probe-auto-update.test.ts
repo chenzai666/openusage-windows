@@ -28,7 +28,7 @@ describe("useProbeAutoUpdate", () => {
     const { result } = renderHook(() =>
       useProbeAutoUpdate({
         pluginSettings: null,
-        autoUpdateInterval: 15,
+        autoUpdateInterval: 900,
         setLoadingForPlugins: vi.fn(),
         setErrorForPlugins: vi.fn(),
         isPluginLoading: vi.fn(() => false),
@@ -49,7 +49,7 @@ describe("useProbeAutoUpdate", () => {
     const { result } = renderHook(() =>
       useProbeAutoUpdate({
         pluginSettings: { order: ["codex"], disabled: [] },
-        autoUpdateInterval: 15,
+        autoUpdateInterval: 900, // 15 minutes in seconds
         setLoadingForPlugins: vi.fn(),
         setErrorForPlugins: vi.fn(),
         isPluginLoading: vi.fn(() => false),
@@ -61,6 +61,7 @@ describe("useProbeAutoUpdate", () => {
       result.current.resetAutoUpdateSchedule()
     })
 
+    // 10000 + 900 * 1000
     expect(result.current.autoUpdateNextAt).toBe(910_000)
     nowSpy.mockRestore()
   })
@@ -77,7 +78,7 @@ describe("useProbeAutoUpdate", () => {
     renderHook(() =>
       useProbeAutoUpdate({
         pluginSettings: { order: ["slow", "idle"], disabled: [] },
-        autoUpdateInterval: 15,
+        autoUpdateInterval: 900,
         setLoadingForPlugins,
         setErrorForPlugins,
         isPluginLoading,
@@ -86,7 +87,7 @@ describe("useProbeAutoUpdate", () => {
     )
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(15 * 60_000)
+      await vi.advanceTimersByTimeAsync(900_000)
     })
 
     expect(isPluginLoading).toHaveBeenCalledWith("slow")
@@ -107,7 +108,7 @@ describe("useProbeAutoUpdate", () => {
     const { result } = renderHook(() =>
       useProbeAutoUpdate({
         pluginSettings: { order: ["slow"], disabled: [] },
-        autoUpdateInterval: 15,
+        autoUpdateInterval: 900,
         setLoadingForPlugins,
         setErrorForPlugins,
         isPluginLoading: vi.fn(() => true),
@@ -118,7 +119,7 @@ describe("useProbeAutoUpdate", () => {
     expect(result.current.autoUpdateNextAt).toBe(910_000)
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(15 * 60_000)
+      await vi.advanceTimersByTimeAsync(900_000)
     })
 
     expect(result.current.autoUpdateNextAt).toBe(1_810_000)

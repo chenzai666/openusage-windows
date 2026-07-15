@@ -347,7 +347,7 @@ describe("App", () => {
       return null
     })
     state.loadPluginSettingsMock.mockResolvedValue({ order: ["a"], disabled: [] })
-    state.loadAutoUpdateIntervalMock.mockResolvedValue(15)
+    state.loadAutoUpdateIntervalMock.mockResolvedValue(900)
   })
 
   afterEach(() => {
@@ -894,7 +894,7 @@ describe("App", () => {
     const settingsButtons = await screen.findAllByRole("button", { name: "设置" })
     await userEvent.click(settingsButtons[0])
     await userEvent.click(await screen.findByRole("radio", { name: "30 分钟" }))
-    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(30)
+    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(1800)
   })
 
   it("logs when saving auto-update interval fails", async () => {
@@ -1461,7 +1461,7 @@ describe("App", () => {
     // Change interval - this triggers the else branch (enabledIds.length === 0)
     await userEvent.click(await screen.findByRole("radio", { name: "30 分钟" }))
 
-    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(30)
+    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(1800)
   })
 
   it("covers interval change branch when plugins exist", async () => {
@@ -1476,13 +1476,13 @@ describe("App", () => {
     // Change interval - this triggers the if branch (enabledIds.length > 0)
     await userEvent.click(await screen.findByRole("radio", { name: "1 小时" }))
 
-    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(60)
+    expect(state.saveAutoUpdateIntervalMock).toHaveBeenCalledWith(3600)
   })
 
   it("fires auto-update interval and schedules next", async () => {
     vi.useFakeTimers()
-    // Set a very short interval for testing (5 min = 300000ms)
-    state.loadAutoUpdateIntervalMock.mockResolvedValueOnce(5)
+    // 5-minute interval in seconds (300s)
+    state.loadAutoUpdateIntervalMock.mockResolvedValueOnce(300)
     state.loadPluginSettingsMock.mockResolvedValueOnce({ order: ["a"], disabled: [] })
 
     render(<App />)
@@ -1515,7 +1515,7 @@ describe("App", () => {
     vi.useFakeTimers()
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 
-    state.loadAutoUpdateIntervalMock.mockResolvedValueOnce(5)
+    state.loadAutoUpdateIntervalMock.mockResolvedValueOnce(300)
     state.loadPluginSettingsMock.mockResolvedValueOnce({ order: ["a"], disabled: [] })
     // First call succeeds (initial batch), subsequent calls fail
     state.startBatchMock

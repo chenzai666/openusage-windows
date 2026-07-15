@@ -133,7 +133,7 @@ describe("SettingsPage", () => {
       />
     )
     await userEvent.click(screen.getByText("30 分钟"))
-    expect(onAutoUpdateIntervalChange).toHaveBeenCalledWith(30)
+    expect(onAutoUpdateIntervalChange).toHaveBeenCalledWith(1800)
   })
 
   it("shows auto-update helper text", () => {

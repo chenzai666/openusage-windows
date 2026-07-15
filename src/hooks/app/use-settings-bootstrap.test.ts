@@ -146,7 +146,7 @@ describe("useSettingsBootstrap", () => {
     loadPluginSettingsMock.mockResolvedValue({ order: ["codex"], disabled: [] })
     normalizePluginSettingsMock.mockImplementation((stored) => stored)
     arePluginSettingsEqualMock.mockReturnValue(true)
-    loadAutoUpdateIntervalMock.mockResolvedValue(15)
+    loadAutoUpdateIntervalMock.mockResolvedValue(900)
     loadThemeModeMock.mockResolvedValue("dark")
     loadDisplayModeMock.mockResolvedValue("used")
     loadResetTimerDisplayModeMock.mockResolvedValue("relative")

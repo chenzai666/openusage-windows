@@ -304,7 +304,7 @@ export function ProviderCard({
         )}
 
         {hasStaleData && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {groupLinesByType(filteredLines).map((group, gi) =>
               group.kind === "text" ? (
                 <div key={gi} className="space-y-1">
@@ -422,19 +422,26 @@ function MetricLineRenderer({
     const periodDurationMs = line.periodDurationMs
     const hasPaceContext = Number.isFinite(resetsAtMs) && Number.isFinite(periodDurationMs)
     const hasTimeMarkerContext = hasPaceContext && periodDurationMs! > 0
+    // Cliproxy Plus–style bars always visualize *usage fill* (used%), while the
+    // text still respects displayMode (已用 / 剩余).
+    const usedPercent =
+      Math.round(clamp01(line.used / Math.max(line.limit, 1e-9)) * 10000) / 100
     const shownAmount =
       displayMode === "used"
         ? line.used
         : Math.max(0, line.limit - line.used)
-    const percent = Math.round(clamp01(shownAmount / line.limit) * 10000) / 100
-    const leftSuffix = displayMode === "left" ? " left" : ""
+    const shownPercent =
+      displayMode === "used"
+        ? usedPercent
+        : Math.round(clamp01(shownAmount / Math.max(line.limit, 1e-9)) * 10000) / 100
+    const modePrefix = displayMode === "used" ? "已用" : "剩余"
 
     const primaryText =
       line.format.kind === "percent"
-        ? `${Math.round(shownAmount)}%${leftSuffix}`
+        ? `${modePrefix} ${Math.round(shownPercent)}%`
         : line.format.kind === "dollars"
-          ? `$${formatFixedPrecisionNumber(shownAmount)}${leftSuffix}`
-          : `${formatCountNumber(shownAmount)} ${line.format.suffix}${leftSuffix}`
+          ? `${modePrefix} $${formatFixedPrecisionNumber(shownAmount)}`
+          : `${modePrefix} ${formatCountNumber(shownAmount)} ${line.format.suffix}`
 
     const resetLabel = line.resetsAt
       ? resetTimerDisplayMode === "absolute"
@@ -450,27 +457,32 @@ function MetricLineRenderer({
         })
       : null
 
+    // Cap / limit line for the right side when no reset countdown
     const secondaryText =
       resetLabel ??
       (line.format.kind === "percent"
-        ? `${line.limit}% cap`
+        ? `上限 ${line.limit}%`
         : line.format.kind === "dollars"
-          ? `$${formatFixedPrecisionNumber(line.limit)} limit`
+          ? `$${formatFixedPrecisionNumber(line.limit)}`
           : `${formatCountNumber(line.limit)} ${line.format.suffix}`)
 
+    // Green bar like Cliproxy Plus quota cards (unless provider supplies color)
+    const barColor = line.color ?? "var(--green-500)"
     // Calculate pace status if we have reset time and period duration
     const paceResult = hasPaceContext
       ? calculatePaceStatus(line.used, line.limit, resetsAtMs, periodDurationMs!, now)
       : null
     const paceStatus = paceResult?.status ?? null
+    // Marker sits on the used-fill bar (always left→right = used%), so use
+    // elapsed time fraction regardless of 已用/剩余 text mode.
     const paceMarkerValue = hasTimeMarkerContext && paceStatus && paceStatus !== "on-track"
       ? (() => {
           const periodStartMs = resetsAtMs - periodDurationMs!
           const elapsedFraction = clamp01((now - periodStartMs) / periodDurationMs!)
-          const elapsedPercent = elapsedFraction * 100
-          return displayMode === "used" ? elapsedPercent : 100 - elapsedPercent
+          return elapsedFraction * 100
         })()
       : undefined
+
     const isLimitReached = line.used >= line.limit
     const paceDetailText =
       hasPaceContext && !isLimitReached
@@ -502,26 +514,33 @@ function MetricLineRenderer({
         })
       : null
 
+    // Cliproxy Plus quota-card layout:
+    //   Label ........................ 已用 15%
+    //   [======== green bar =================]
+    //                         重置时间 (optional)
     return (
-      <div>
-        <div className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
-          {line.label}
-          {paceStatus && (
-            <PaceIndicator status={paceStatus} detailText={paceDetailText} isLimitReached={isLimitReached} />
-          )}
-        </div>
-        <Progress
-          value={percent}
-          indicatorColor={line.color}
-          markerValue={paceMarkerValue}
-          refreshing={refreshing}
-        />
-        <div className="flex justify-between items-center mt-1.5">
-          <span className="text-xs text-muted-foreground tabular-nums">
+      <div className="space-y-1.5">
+        <div className="flex justify-between items-center gap-2 min-h-[18px]">
+          <span className="text-[13px] text-foreground/90 min-w-0 truncate flex items-center gap-1.5">
+            {line.label}
+            {paceStatus && (
+              <PaceIndicator status={paceStatus} detailText={paceDetailText} isLimitReached={isLimitReached} />
+            )}
+          </span>
+          <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0 font-medium">
             {primaryText}
           </span>
-          {secondaryText && (
-            resetTooltipText ? (
+        </div>
+        <Progress
+          value={usedPercent}
+          indicatorColor={barColor}
+          markerValue={paceMarkerValue}
+          refreshing={refreshing}
+          className="h-2 rounded-full"
+        />
+        {secondaryText && (
+          <div className="flex justify-end items-center">
+            {resetTooltipText ? (
               <Tooltip>
                 <TooltipTrigger
                   render={(props) =>
@@ -530,12 +549,12 @@ function MetricLineRenderer({
                         {...props}
                         type="button"
                         onClick={onResetTimerDisplayModeToggle}
-                        className="text-xs text-muted-foreground tabular-nums hover:text-foreground transition-colors"
+                        className="text-[11px] text-muted-foreground tabular-nums hover:text-foreground transition-colors"
                       >
                         {secondaryText}
                       </button>
                     ) : (
-                      <span {...props} className="text-xs text-muted-foreground tabular-nums">
+                      <span {...props} className="text-[11px] text-muted-foreground tabular-nums">
                         {secondaryText}
                       </span>
                     )
@@ -547,27 +566,26 @@ function MetricLineRenderer({
               <button
                 type="button"
                 onClick={onResetTimerDisplayModeToggle}
-                className="text-xs text-muted-foreground tabular-nums hover:text-foreground transition-colors"
+                className="text-[11px] text-muted-foreground tabular-nums hover:text-foreground transition-colors"
               >
                 {secondaryText}
               </button>
             ) : (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
                 {secondaryText}
               </span>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        )}
         {(deficitText || runsOutText) && (
-          <div className="flex justify-between items-center mt-0.5">
+          <div className="flex justify-between items-center">
             {deficitText && (
-              <span className="text-xs text-muted-foreground tabular-nums">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
                 {deficitText}
               </span>
             )}
             {runsOutText && (
-              <span className="text-xs text-muted-foreground tabular-nums ml-auto">
-                {runsOutText}
+              <span className="text-[11px] text-muted-foreground tabular-nums ml-auto">                {runsOutText}
               </span>
             )}
           </div>

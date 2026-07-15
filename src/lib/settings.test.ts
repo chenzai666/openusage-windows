@@ -179,12 +179,12 @@ describe("settings", () => {
 
   it("loads stored auto-update interval", async () => {
     storeState.set("autoUpdateInterval", 30)
-    await expect(loadAutoUpdateInterval()).resolves.toBe(30)
+    await expect(loadAutoUpdateInterval()).resolves.toBe(1800)
   })
 
   it("saves auto-update interval", async () => {
-    await saveAutoUpdateInterval(5)
-    await expect(loadAutoUpdateInterval()).resolves.toBe(5)
+    await saveAutoUpdateInterval(300)
+    await expect(loadAutoUpdateInterval()).resolves.toBe(300)
   })
 
   it("loads default theme mode when missing", async () => {

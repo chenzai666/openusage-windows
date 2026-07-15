@@ -105,9 +105,9 @@ describe("ProviderCard", () => {
     )
     expect(screen.getByText("Label")).toBeInTheDocument()
     expect(screen.getByText("Pro")).toBeInTheDocument()
-    expect(screen.getByText("32%")).toBeInTheDocument()
-    expect(screen.getByText("$12.34")).toBeInTheDocument()
-    expect(screen.getByText("342 credits")).toBeInTheDocument()
+    expect(screen.getByText("已用 32%")).toBeInTheDocument()
+    expect(screen.getByText("已用 $12.34")).toBeInTheDocument()
+    expect(screen.getByText("已用 342 credits")).toBeInTheDocument()
   })
 
   it("renders quick links and opens URL", async () => {
@@ -148,7 +148,8 @@ describe("ProviderCard", () => {
     vi.useFakeTimers()
     const now = new Date("2026-02-02T00:00:00.000Z")
     vi.setSystemTime(now)
-    const lastManualRefreshAt = now.getTime() - (REFRESH_COOLDOWN_MS - 65_000)
+    // 15s remaining of the 30s cooldown
+    const lastManualRefreshAt = now.getTime() - (REFRESH_COOLDOWN_MS - 15_000)
     render(
       <ProviderCard
         name="Cooldown"
@@ -157,14 +158,16 @@ describe("ProviderCard", () => {
         onRetry={() => {}}
       />
     )
-    expect(screen.getByText("Available in 1m 5s")).toBeInTheDocument()
+    expect(screen.getByText("Available in 15s")).toBeInTheDocument()
+    vi.useRealTimers()
   })
 
   it("shows seconds-only cooldown", () => {
     vi.useFakeTimers()
     const now = new Date("2026-02-02T00:00:00.000Z")
     vi.setSystemTime(now)
-    const lastManualRefreshAt = now.getTime() - (REFRESH_COOLDOWN_MS - 30_000)
+    // just refreshed → full cooldown remaining
+    const lastManualRefreshAt = now.getTime()
     render(
       <ProviderCard
         name="Cooldown"
@@ -198,8 +201,9 @@ describe("ProviderCard", () => {
         ]}
       />
     )
-    expect(screen.getByText("58% left")).toBeInTheDocument()
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "58")
+    // Text shows remaining; bar fill always shows used%
+    expect(screen.getByText("剩余 58%")).toBeInTheDocument()
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "42")
   })
 
   it("uses elapsed-time marker position in displayMode=left", () => {
@@ -225,7 +229,8 @@ describe("ProviderCard", () => {
     )
     const marker = document.querySelector<HTMLElement>('[data-slot="progress-marker"]')
     expect(marker).toBeTruthy()
-    expect(marker?.style.left).toBe("25%")
+    // Bar always fills by used%; time marker is elapsed fraction (18h/24h = 75%)
+    expect(marker?.style.left).toBe("75%")
     vi.useRealTimers()
   })
 
@@ -280,7 +285,7 @@ describe("ProviderCard", () => {
       />
     )
 
-    expect(screen.getByText("100% cap")).toBeInTheDocument()
+    expect(screen.getByText("上限 100%")).toBeInTheDocument()
     expect(screen.queryByText(/^Next reset:/)).not.toBeInTheDocument()
   })
 
@@ -828,7 +833,7 @@ describe("ProviderCard", () => {
     )
     // Real data stays on screen — no skeleton swap
     expect(screen.getByText("Value")).toBeInTheDocument()
-    expect(screen.getByText("32%")).toBeInTheDocument()
+    expect(screen.getByText("已用 32%")).toBeInTheDocument()
     // Progress bar shows shimmer overlay
     expect(document.querySelector('[data-slot="progress-refreshing"]')).toBeTruthy()
   })
@@ -881,7 +886,7 @@ describe("ProviderCard", () => {
       />
     )
     // Stale data still visible
-    expect(screen.getByText("40%")).toBeInTheDocument()
+    expect(screen.getByText("已用 40%")).toBeInTheDocument()
     // Inline warning shown (not the full PluginError alert) — error text appears
     // in both the trigger and the tooltip content via our mocked Tooltip
     expect(screen.getAllByText("Couldn't update data. Try again?").length).toBeGreaterThan(0)

@@ -337,7 +337,11 @@ export function SettingsPage({
           刷新频率
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="自动刷新间隔">
+          <div
+            className="grid grid-cols-3 gap-1"
+            role="radiogroup"
+            aria-label="自动刷新间隔"
+          >
             {AUTO_UPDATE_OPTIONS.map((option) => {
               const isActive = option.value === autoUpdateInterval;
               return (
@@ -348,7 +352,7 @@ export function SettingsPage({
                   aria-checked={isActive}
                   variant={isActive ? "default" : "outline"}
                   size="sm"
-                  className="flex-1"
+                  className="w-full text-xs px-1"
                   onClick={() => onAutoUpdateIntervalChange(option.value)}
                 >
                   {option.label}

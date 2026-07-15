@@ -33,7 +33,8 @@ export function useSettingsSystemActions({
     if (pluginSettings) {
       const enabledIds = getEnabledPluginIds(pluginSettings)
       if (enabledIds.length > 0) {
-        setAutoUpdateNextAt(Date.now() + value * 60_000)
+        // value is seconds
+        setAutoUpdateNextAt(Date.now() + value * 1_000)
       } else {
         setAutoUpdateNextAt(null)
       }

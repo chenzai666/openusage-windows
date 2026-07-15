@@ -1,8 +1,8 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import type { PluginMeta } from "@/lib/plugin-types";
 
-// Refresh cooldown duration in milliseconds (5 minutes)
-export const REFRESH_COOLDOWN_MS = 300_000;
+// Manual refresh cooldown (30s — was 5m, too long for short auto-refresh intervals)
+export const REFRESH_COOLDOWN_MS = 30_000;
 
 // Spec: persist plugin order + disabled list; new plugins append, default disabled unless in DEFAULT_ENABLED_PLUGINS.
 export type PluginSettings = {
@@ -10,7 +10,11 @@ export type PluginSettings = {
   disabled: string[];
 };
 
-export type AutoUpdateIntervalMinutes = 5 | 15 | 30 | 60;
+/** Auto-refresh interval in seconds. */
+export type AutoUpdateIntervalSeconds = 30 | 60 | 300 | 900 | 1800 | 3600;
+
+/** @deprecated Use AutoUpdateIntervalSeconds — kept as alias for gradual renames. */
+export type AutoUpdateIntervalMinutes = AutoUpdateIntervalSeconds;
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -29,6 +33,8 @@ export type GlobalShortcut = string | null;
 const SETTINGS_STORE_PATH = "settings.json";
 const PLUGIN_SETTINGS_KEY = "plugins";
 const AUTO_UPDATE_SETTINGS_KEY = "autoUpdateInterval";
+/** New key: interval stored in seconds (avoids 30/60 min-vs-sec ambiguity). */
+const AUTO_UPDATE_SECONDS_KEY = "autoUpdateIntervalSeconds";
 const THEME_MODE_KEY = "themeMode";
 const DISPLAY_MODE_KEY = "displayMode";
 const RESET_TIMER_DISPLAY_MODE_KEY = "resetTimerDisplayMode";
@@ -44,7 +50,8 @@ const RETIREMENT_NOTICE_DISMISSED_AT_KEY = "retirementNoticeDismissedAt";
 // How long a dismissal lasts before the retirement notice is shown again (7 days).
 export const RETIREMENT_NOTICE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const DEFAULT_AUTO_UPDATE_INTERVAL: AutoUpdateIntervalMinutes = 15;
+/** Default: 1 minute (seconds). */
+export const DEFAULT_AUTO_UPDATE_INTERVAL: AutoUpdateIntervalSeconds = 60;
 export const DEFAULT_THEME_MODE: ThemeMode = "system";
 export const DEFAULT_DISPLAY_MODE: DisplayMode = "left";
 export const DEFAULT_RESET_TIMER_DISPLAY_MODE: ResetTimerDisplayMode = "relative";
@@ -54,7 +61,7 @@ export const DEFAULT_MENUBAR_METRIC: MenubarMetric = "default";
 export const DEFAULT_GLOBAL_SHORTCUT: GlobalShortcut = null;
 export const DEFAULT_START_ON_LOGIN = false;
 
-const AUTO_UPDATE_INTERVALS: AutoUpdateIntervalMinutes[] = [5, 15, 30, 60];
+const AUTO_UPDATE_INTERVALS: AutoUpdateIntervalSeconds[] = [30, 60, 300, 900, 1800, 3600];
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const DISPLAY_MODES: DisplayMode[] = ["used", "left"];
 const RESET_TIMER_DISPLAY_MODES: ResetTimerDisplayMode[] = ["relative", "absolute"];
@@ -73,10 +80,19 @@ export const MENUBAR_METRIC_OPTIONS: { value: MenubarMetric; label: string }[] =
   { value: "weekly", label: "每周" },
 ];
 
-export const AUTO_UPDATE_OPTIONS: { value: AutoUpdateIntervalMinutes; label: string }[] =
+const AUTO_UPDATE_LABELS: Record<AutoUpdateIntervalSeconds, string> = {
+  30: "30 秒",
+  60: "1 分钟",
+  300: "5 分钟",
+  900: "15 分钟",
+  1800: "30 分钟",
+  3600: "1 小时",
+};
+
+export const AUTO_UPDATE_OPTIONS: { value: AutoUpdateIntervalSeconds; label: string }[] =
   AUTO_UPDATE_INTERVALS.map((value) => ({
     value,
-    label: value === 60 ? "1 小时" : `${value} 分钟`,
+    label: AUTO_UPDATE_LABELS[value],
   }));
 
 const THEME_LABELS: Record<ThemeMode, string> = {
@@ -154,22 +170,43 @@ export function migrateWindsurfToDevin(settings: PluginSettings): PluginSettings
   };
 }
 
-function isAutoUpdateInterval(value: unknown): value is AutoUpdateIntervalMinutes {
+function isAutoUpdateInterval(value: unknown): value is AutoUpdateIntervalSeconds {
   return (
     typeof value === "number" &&
-    AUTO_UPDATE_INTERVALS.includes(value as AutoUpdateIntervalMinutes)
+    AUTO_UPDATE_INTERVALS.includes(value as AutoUpdateIntervalSeconds)
   );
 }
 
-export async function loadAutoUpdateInterval(): Promise<AutoUpdateIntervalMinutes> {
-  const stored = await store.get<unknown>(AUTO_UPDATE_SETTINGS_KEY);
-  if (isAutoUpdateInterval(stored)) return stored;
+/** Legacy store values were minutes: 5 | 15 | 30 | 60. */
+function migrateLegacyMinutes(value: unknown): AutoUpdateIntervalSeconds | null {
+  if (typeof value !== "number") return null;
+  const legacyMinutes = [5, 15, 30, 60] as const;
+  if (!(legacyMinutes as readonly number[]).includes(value)) return null;
+  const seconds = (value * 60) as AutoUpdateIntervalSeconds;
+  // 5→300, 15→900, 30→1800, 60→3600 — all valid in the new set
+  return isAutoUpdateInterval(seconds) ? seconds : null;
+}
+
+export async function loadAutoUpdateInterval(): Promise<AutoUpdateIntervalSeconds> {
+  const storedSeconds = await store.get<unknown>(AUTO_UPDATE_SECONDS_KEY);
+  if (isAutoUpdateInterval(storedSeconds)) return storedSeconds;
+
+  // Migrate from old minutes-based key once
+  const legacy = await store.get<unknown>(AUTO_UPDATE_SETTINGS_KEY);
+  const migrated = migrateLegacyMinutes(legacy);
+  if (migrated != null) {
+    await store.set(AUTO_UPDATE_SECONDS_KEY, migrated);
+    return migrated;
+  }
+
   return DEFAULT_AUTO_UPDATE_INTERVAL;
 }
 
 export async function saveAutoUpdateInterval(
-  interval: AutoUpdateIntervalMinutes
+  interval: AutoUpdateIntervalSeconds
 ): Promise<void> {
+  await store.set(AUTO_UPDATE_SECONDS_KEY, interval);
+  // Keep legacy key cleared / mirrored in seconds so old readers don't misinterpret
   await store.set(AUTO_UPDATE_SETTINGS_KEY, interval);
   await store.save();
 }

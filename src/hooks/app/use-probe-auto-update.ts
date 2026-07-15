@@ -37,7 +37,8 @@ export function useProbeAutoUpdate({
       return
     }
 
-    const intervalMs = autoUpdateInterval * 60_000
+    // autoUpdateInterval is stored in seconds
+    const intervalMs = autoUpdateInterval * 1_000
     const scheduleNext = () => setAutoUpdateNextAt(Date.now() + intervalMs)
     scheduleNext()
 
@@ -77,7 +78,7 @@ export function useProbeAutoUpdate({
     }
     /* v8 ignore stop */
 
-    setAutoUpdateNextAt(Date.now() + autoUpdateInterval * 60_000)
+    setAutoUpdateNextAt(Date.now() + autoUpdateInterval * 1_000)
     setAutoUpdateResetToken((value) => value + 1)
   }, [autoUpdateInterval, pluginSettings])
 
