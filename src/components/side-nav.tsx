@@ -220,7 +220,7 @@ export function SideNav({
       <NavButton
         isActive={activeView === "home"}
         onClick={() => onViewChange("home")}
-        aria-label="Home"
+        aria-label="首页"
       >
         <GaugeIcon className="size-6 dark:text-page-accent" />
       </NavButton>
@@ -257,7 +257,7 @@ export function SideNav({
           openUrl("https://github.com/robinebers/openusage/issues").catch(console.error)
           invoke("hide_panel").catch(console.error)
         }}
-        aria-label="Help"
+        aria-label="帮助"
       >
         <CircleHelp className="size-6" />
       </NavButton>
@@ -266,7 +266,7 @@ export function SideNav({
       <NavButton
         isActive={activeView === "settings"}
         onClick={() => onViewChange("settings")}
-        aria-label="Settings"
+        aria-label="设置"
       >
         <Settings className="size-6" />
       </NavButton>

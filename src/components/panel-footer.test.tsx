@@ -25,7 +25,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Next update in 5m")).toBeTruthy()
+    expect(screen.getByText("5 分钟后刷新")).toBeTruthy()
   })
 
   it("shows countdown in seconds when < 60 seconds", () => {
@@ -39,7 +39,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Next update in 30s")).toBeTruthy()
+    expect(screen.getByText("30 秒后刷新")).toBeTruthy()
   })
 
   it("triggers refresh when clicking countdown label", async () => {
@@ -55,7 +55,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    const button = screen.getByRole("button", { name: /Next update in/i })
+    const button = screen.getByRole("button", { name: /分钟后刷新|秒后刷新/i })
     await userEvent.click(button)
     expect(onRefreshAll).toHaveBeenCalledTimes(1)
   })
@@ -70,7 +70,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Paused")).toBeTruthy()
+    expect(screen.getByText("已暂停")).toBeTruthy()
   })
 
   it("shows downloading state", () => {
@@ -83,7 +83,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Downloading update 42%")).toBeTruthy()
+    expect(screen.getByText("正在下载更新 42%")).toBeTruthy()
   })
 
   it("shows downloading state without percentage when progress is unknown", () => {
@@ -96,7 +96,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Downloading update...")).toBeTruthy()
+    expect(screen.getByText("正在下载更新…")).toBeTruthy()
   })
 
   it("shows restart button when ready", async () => {
@@ -110,7 +110,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    const button = screen.getByText("Restart to update")
+    const button = screen.getByText("重启以更新")
     expect(button).toBeTruthy()
     await userEvent.click(button)
     expect(onInstall).toHaveBeenCalledTimes(1)
@@ -131,7 +131,7 @@ describe("PanelFooter", () => {
       />
     )
 
-    const retryButton = screen.getByRole("button", { name: "Updates soon" })
+    const retryButton = screen.getByRole("button", { name: "即将检查更新" })
     expect(retryButton).toBeTruthy()
     await userEvent.click(retryButton)
     expect(onUpdateCheck).toHaveBeenCalledTimes(1)
@@ -147,8 +147,8 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(container.textContent).toContain("Update failed")
-    expect(screen.queryByRole("button", { name: "Updates soon" })).toBeNull()
+    expect(container.textContent).toContain("更新失败")
+    expect(screen.queryByRole("button", { name: "即将检查更新" })).toBeNull()
   })
 
   it("shows installing state", () => {
@@ -161,7 +161,7 @@ describe("PanelFooter", () => {
         {...footerProps}
       />
     )
-    expect(screen.getByText("Installing...")).toBeTruthy()
+    expect(screen.getByText("正在安装…")).toBeTruthy()
   })
 
   it("opens About dialog when clicking version in idle state", async () => {
@@ -183,10 +183,10 @@ describe("PanelFooter", () => {
 
     render(<Harness />)
     await userEvent.click(screen.getByRole("button", { name: /OpenUsage/ }))
-    expect(screen.getByText("Open source on")).toBeInTheDocument()
+    expect(screen.getByText("Windows 版")).toBeInTheDocument()
 
     // Close via Escape to exercise AboutDialog onClose path.
     await userEvent.keyboard("{Escape}")
-    expect(screen.queryByText("Open source on")).not.toBeInTheDocument()
+    expect(screen.queryByText("Windows 版")).not.toBeInTheDocument()
   })
 })

@@ -103,29 +103,25 @@ export function AboutDialog({ version, onClose }: AboutDialogProps) {
             onClick={() => setView("changelog")}
             className="text-[10px] h-5 px-1.5"
           >
-            View Changelog
+            查看更新日志
           </Button>
         </div>
 
         <div className="text-sm text-muted-foreground space-y-1">
           <p>
-            Built by{" "}
+            原作者{" "}
             <ExternalLink href="https://itsbyrob.in/x">Robin Ebers</ExternalLink>
           </p>
           <p>
-            Open source on{" "}
-            <ExternalLink href="https://github.com/robinebers/openusage">
-              GitHub
+            Windows 版{" "}
+            <ExternalLink href="https://github.com/chenzai666/openusage-windows">
+              chenzai666/openusage-windows
             </ExternalLink>
           </p>
           <p className="text-xs pt-1">
-            Maintainers:{" "}
-            <ExternalLink href="https://github.com/validatedev">
-              validatedev
-            </ExternalLink>
-            ,{" "}
-            <ExternalLink href="https://github.com/davidarny">
-              davidarny
+            上游开源{" "}
+            <ExternalLink href="https://github.com/robinebers/openusage">
+              robinebers/openusage
             </ExternalLink>
           </p>
         </div>

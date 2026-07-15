@@ -64,13 +64,13 @@ function PaceIndicator({
           <span
             {...props}
             className={`inline-block w-2 h-2 rounded-full ${colorClass}`}
-            aria-label={isLimitReached ? "Limit reached" : statusText}
+            aria-label={isLimitReached ? "已达上限" : statusText}
           />
         )}
       />
       <TooltipContent side="top" className="text-xs text-center">
         {isLimitReached ? (
-          "Limit reached"
+          "已达上限"
         ) : (
           <>
             <div>{statusText}</div>
@@ -229,7 +229,7 @@ export function ProviderCard({
                         {...props}
                         variant="ghost"
                         size="icon-xs"
-                        aria-label="Retry"
+                        aria-label="重试"
                         onClick={(e) => {
                           e.currentTarget.blur()
                           onRetry()

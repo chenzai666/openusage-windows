@@ -27,20 +27,25 @@ describe("AboutDialog", () => {
     render(<AboutDialog version="1.2.3" onClose={() => {}} />)
     expect(screen.getByText("OpenUsage")).toBeInTheDocument()
     expect(screen.getByText("v1.2.3")).toBeInTheDocument()
-    expect(screen.getByText("GitHub")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "validatedev" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "davidarny" })).toBeInTheDocument()
+    expect(screen.getByText("原作者")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Robin Ebers" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "chenzai666/openusage-windows" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "robinebers/openusage" })).toBeInTheDocument()
   })
 
-  it("opens maintainer GitHub profiles on click", async () => {
+  it("opens project links on click", async () => {
     render(<AboutDialog version="1.2.3" onClose={() => {}} />)
 
-    await userEvent.click(screen.getByRole("button", { name: "validatedev" }))
-    expect(openerState.openUrlMock).toHaveBeenCalledWith("https://github.com/validatedev")
+    await userEvent.click(screen.getByRole("button", { name: "chenzai666/openusage-windows" }))
+    expect(openerState.openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/chenzai666/openusage-windows"
+    )
 
     openerState.openUrlMock.mockClear()
-    await userEvent.click(screen.getByRole("button", { name: "davidarny" }))
-    expect(openerState.openUrlMock).toHaveBeenCalledWith("https://github.com/davidarny")
+    await userEvent.click(screen.getByRole("button", { name: "robinebers/openusage" }))
+    expect(openerState.openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/robinebers/openusage"
+    )
   })
 
   it("closes on Escape", async () => {
@@ -55,7 +60,7 @@ describe("AboutDialog", () => {
     render(<AboutDialog version="1.2.3" onClose={onClose} />)
 
     // Switch to changelog view.
-    await userEvent.click(screen.getByRole("button", { name: "View Changelog" }))
+    await userEvent.click(screen.getByRole("button", { name: "查看更新日志" }))
 
     // Press Escape; should go back to About view, not close.
     await userEvent.keyboard("{Escape}")
@@ -89,7 +94,7 @@ describe("AboutDialog", () => {
     openerState.openUrlMock.mockImplementationOnce(() => Promise.reject(new Error("fail")))
 
     render(<AboutDialog version="1.2.3" onClose={() => {}} />)
-    await userEvent.click(screen.getByRole("button", { name: "GitHub" }))
+    await userEvent.click(screen.getByRole("button", { name: "Robin Ebers" }))
 
     expect(openerState.openUrlMock).toHaveBeenCalled()
     // wait microtask for catch

@@ -25,7 +25,7 @@ export function OverviewPage({
       <RetirementNotice />
       {plugins.length === 0 ? (
         <div className="text-center text-muted-foreground py-8">
-          No providers enabled
+          尚未启用任何提供商
         </div>
       ) : (
         plugins.map((plugin, index) => (

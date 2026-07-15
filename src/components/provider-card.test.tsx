@@ -56,7 +56,7 @@ describe("ProviderCard", () => {
       />
     )
     expect(screen.getByText("Nope")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: "Retry" }))
+    await userEvent.click(screen.getByRole("button", { name: "重试" }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
@@ -582,8 +582,8 @@ describe("ProviderCard", () => {
         ]}
       />
     )
-    expect(screen.getByLabelText("Limit reached")).toBeInTheDocument()
-    expect(screen.getByText("Limit reached")).toBeInTheDocument()
+    expect(screen.getByLabelText("已达上限")).toBeInTheDocument()
+    expect(screen.getByText("已达上限")).toBeInTheDocument()
     expect(screen.queryByText(/in deficit/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/runs out in/i)).not.toBeInTheDocument()
     vi.useRealTimers()

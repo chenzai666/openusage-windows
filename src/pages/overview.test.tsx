@@ -5,7 +5,7 @@ import { OverviewPage } from "@/pages/overview"
 describe("OverviewPage", () => {
   it("renders empty state", () => {
     render(<OverviewPage plugins={[]} displayMode="used" resetTimerDisplayMode="relative" />)
-    expect(screen.getByText("No providers enabled")).toBeInTheDocument()
+    expect(screen.getByText("尚未启用任何提供商")).toBeInTheDocument()
   })
 
   it("renders provider cards", () => {

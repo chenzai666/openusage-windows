@@ -132,22 +132,22 @@ describe("SettingsPage", () => {
         onAutoUpdateIntervalChange={onAutoUpdateIntervalChange}
       />
     )
-    await userEvent.click(screen.getByText("30 min"))
+    await userEvent.click(screen.getByText("30 分钟"))
     expect(onAutoUpdateIntervalChange).toHaveBeenCalledWith(30)
   })
 
   it("shows auto-update helper text", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("How obsessive are you")).toBeInTheDocument()
+    expect(screen.getByText("刷新频率")).toBeInTheDocument()
   })
 
   it("renders app theme section with theme options", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("App Theme")).toBeInTheDocument()
-    expect(screen.getByText("How it looks around here")).toBeInTheDocument()
-    expect(screen.getByText("System")).toBeInTheDocument()
-    expect(screen.getByText("Light")).toBeInTheDocument()
-    expect(screen.getByText("Dark")).toBeInTheDocument()
+    expect(screen.getByText("应用主题")).toBeInTheDocument()
+    expect(screen.getByText("界面外观")).toBeInTheDocument()
+    expect(screen.getByText("跟随系统")).toBeInTheDocument()
+    expect(screen.getByText("浅色")).toBeInTheDocument()
+    expect(screen.getByText("深色")).toBeInTheDocument()
   })
 
   it("updates theme mode", async () => {
@@ -158,7 +158,7 @@ describe("SettingsPage", () => {
         onThemeModeChange={onThemeModeChange}
       />
     )
-    await userEvent.click(screen.getByText("Dark"))
+    await userEvent.click(screen.getByText("深色"))
     expect(onThemeModeChange).toHaveBeenCalledWith("dark")
   })
 
@@ -170,7 +170,7 @@ describe("SettingsPage", () => {
         onDisplayModeChange={onDisplayModeChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "Left" }))
+    await userEvent.click(screen.getByRole("radio", { name: "剩余" }))
     expect(onDisplayModeChange).toHaveBeenCalledWith("left")
   })
 
@@ -182,24 +182,24 @@ describe("SettingsPage", () => {
         onResetTimerDisplayModeChange={onResetTimerDisplayModeChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: /Absolute/ }))
+    await userEvent.click(screen.getByRole("radio", { name: /绝对时间/ }))
     expect(onResetTimerDisplayModeChange).toHaveBeenCalledWith("absolute")
   })
 
   it("renders renamed usage section heading", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("Usage Mode")).toBeInTheDocument()
+    expect(screen.getByText("用量显示")).toBeInTheDocument()
   })
 
   it("renders reset timers section heading", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("Reset Timers")).toBeInTheDocument()
+    expect(screen.getByText("重置时间")).toBeInTheDocument()
   })
 
   it("renders time format section heading", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("Time Format")).toBeInTheDocument()
-    expect(screen.getByText("12-hour or 24-hour clock")).toBeInTheDocument()
+    expect(screen.getByText("时间格式")).toBeInTheDocument()
+    expect(screen.getByText("12 小时制或 24 小时制")).toBeInTheDocument()
   })
 
   it("updates time format mode to 12h", async () => {
@@ -210,7 +210,7 @@ describe("SettingsPage", () => {
         onTimeFormatModeChange={onTimeFormatModeChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "12-hour" }))
+    await userEvent.click(screen.getByRole("radio", { name: "12 小时制" }))
     expect(onTimeFormatModeChange).toHaveBeenCalledWith("12h")
   })
 
@@ -222,14 +222,14 @@ describe("SettingsPage", () => {
         onTimeFormatModeChange={onTimeFormatModeChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "24-hour" }))
+    await userEvent.click(screen.getByRole("radio", { name: "24 小时制" }))
     expect(onTimeFormatModeChange).toHaveBeenCalledWith("24h")
   })
 
   it("renders menubar icon section", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("Menubar Icon")).toBeInTheDocument()
-    expect(screen.getByText("What shows in the menu bar")).toBeInTheDocument()
+    expect(screen.getByText("托盘图标")).toBeInTheDocument()
+    expect(screen.getByText("系统托盘显示内容")).toBeInTheDocument()
   })
 
   it("clicking Bars triggers onMenubarIconStyleChange(\"bars\")", async () => {
@@ -240,7 +240,7 @@ describe("SettingsPage", () => {
         onMenubarIconStyleChange={onMenubarIconStyleChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "Bars" }))
+    await userEvent.click(screen.getByRole("radio", { name: "进度条" }))
     expect(onMenubarIconStyleChange).toHaveBeenCalledWith("bars")
   })
 
@@ -252,15 +252,15 @@ describe("SettingsPage", () => {
         onMenubarIconStyleChange={onMenubarIconStyleChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "Donut" }))
+    await userEvent.click(screen.getByRole("radio", { name: "圆环" }))
     expect(onMenubarIconStyleChange).toHaveBeenCalledWith("donut")
   })
 
   it("renders the menubar metric control", () => {
     render(<SettingsPage {...defaultProps} />)
-    expect(screen.getByText("Metric")).toBeInTheDocument()
-    expect(screen.getByRole("radio", { name: "Default" })).toBeInTheDocument()
-    expect(screen.getByRole("radio", { name: "Weekly" })).toBeInTheDocument()
+    expect(screen.getByText("指标")).toBeInTheDocument()
+    expect(screen.getByRole("radio", { name: "默认" })).toBeInTheDocument()
+    expect(screen.getByRole("radio", { name: "每周" })).toBeInTheDocument()
   })
 
   it("clicking Weekly triggers onMenubarMetricChange(\"weekly\")", async () => {
@@ -271,7 +271,7 @@ describe("SettingsPage", () => {
         onMenubarMetricChange={onMenubarMetricChange}
       />
     )
-    await userEvent.click(screen.getByRole("radio", { name: "Weekly" }))
+    await userEvent.click(screen.getByRole("radio", { name: "每周" }))
     expect(onMenubarMetricChange).toHaveBeenCalledWith("weekly")
   })
 
@@ -289,7 +289,7 @@ describe("SettingsPage", () => {
         onStartOnLoginChange={onStartOnLoginChange}
       />
     )
-    await userEvent.click(screen.getByText("Start on login"))
+    await userEvent.click(screen.getByText("开机时启动"))
     expect(onStartOnLoginChange).toHaveBeenCalledWith(true)
   })
 })

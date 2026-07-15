@@ -332,12 +332,12 @@ export function SettingsPage({
   return (
     <div className="py-3 space-y-4">
       <section>
-        <h3 className="text-lg font-semibold mb-0">Auto Refresh</h3>
+        <h3 className="text-lg font-semibold mb-0">自动刷新</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          How obsessive are you
+          刷新频率
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Auto-update interval">
+          <div className="flex gap-1" role="radiogroup" aria-label="自动刷新间隔">
             {AUTO_UPDATE_OPTIONS.map((option) => {
               const isActive = option.value === autoUpdateInterval;
               return (
@@ -359,12 +359,12 @@ export function SettingsPage({
         </div>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">Usage Mode</h3>
+        <h3 className="text-lg font-semibold mb-0">用量显示</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          Glass half full or half empty
+          显示已用还是剩余
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Usage display mode">
+          <div className="flex gap-1" role="radiogroup" aria-label="用量显示模式">
             {DISPLAY_MODE_OPTIONS.map((option) => {
               const isActive = option.value === displayMode;
               return (
@@ -386,16 +386,16 @@ export function SettingsPage({
         </div>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">Reset Timers</h3>
+        <h3 className="text-lg font-semibold mb-0">重置时间</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          Countdown or clock time
+          倒计时或具体时刻
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Reset timer display mode">
+          <div className="flex gap-1" role="radiogroup" aria-label="重置时间显示">
             {RESET_TIMER_DISPLAY_OPTIONS.map((option) => {
               const isActive = option.value === resetTimerDisplayMode;
               const absoluteTimeExample = getTimeFormatter(timeFormatMode).format(new Date(2026, 1, 2, 11, 4));
-              const example = option.value === "relative" ? "5h 12m" : `today at ${absoluteTimeExample}`;
+              const example = option.value === "relative" ? "5时12分" : `今天 ${absoluteTimeExample}`;
               return (
                 <Button
                   key={option.value}
@@ -423,12 +423,12 @@ export function SettingsPage({
         </div>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">Time Format</h3>
+        <h3 className="text-lg font-semibold mb-0">时间格式</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          12-hour or 24-hour clock
+          12 小时制或 24 小时制
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Time format">
+          <div className="flex gap-1" role="radiogroup" aria-label="时间格式">
             {TIME_FORMAT_OPTIONS.map((option) => {
               const isActive = option.value === timeFormatMode;
               const example = getTimeFormatter(option.value).format(new Date(2026, 1, 2, 11, 4));
@@ -460,12 +460,12 @@ export function SettingsPage({
         </div>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">Menubar Icon</h3>
+        <h3 className="text-lg font-semibold mb-0">托盘图标</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          What shows in the menu bar
+          系统托盘显示内容
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Menubar icon style">
+          <div className="flex gap-1" role="radiogroup" aria-label="托盘图标样式">
             {MENUBAR_ICON_STYLE_OPTIONS.map((option) => {
               const isActive = option.value === menubarIconStyle;
               return (
@@ -490,9 +490,9 @@ export function SettingsPage({
             })}
           </div>
         </div>
-        <p className="text-sm text-muted-foreground mt-3 mb-2">Metric</p>
+        <p className="text-sm text-muted-foreground mt-3 mb-2">指标</p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Menubar metric">
+          <div className="flex gap-1" role="radiogroup" aria-label="托盘指标">
             {MENUBAR_METRIC_OPTIONS.map((option) => {
               const isActive = option.value === menubarMetric;
               return (
@@ -515,12 +515,12 @@ export function SettingsPage({
         </div>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">App Theme</h3>
+        <h3 className="text-lg font-semibold mb-0">应用主题</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          How it looks around here
+          界面外观
         </p>
         <div className="bg-muted/50 rounded-lg p-1">
-          <div className="flex gap-1" role="radiogroup" aria-label="Theme mode">
+          <div className="flex gap-1" role="radiogroup" aria-label="主题模式">
             {THEME_OPTIONS.map((option) => {
               const isActive = option.value === themeMode;
               return (
@@ -546,9 +546,9 @@ export function SettingsPage({
         onGlobalShortcutChange={onGlobalShortcutChange}
       />
       <section>
-        <h3 className="text-lg font-semibold mb-0">Start on Login</h3>
+        <h3 className="text-lg font-semibold mb-0">开机启动</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          OpenUsage starts when you sign in
+          登录 Windows 后自动启动
         </p>
         <label className="flex items-center gap-2 text-sm select-none text-foreground">
           <Checkbox
@@ -556,13 +556,13 @@ export function SettingsPage({
             checked={startOnLogin}
             onCheckedChange={(checked) => onStartOnLoginChange(checked === true)}
           />
-          Start on login
+          开机时启动
         </label>
       </section>
       <section>
-        <h3 className="text-lg font-semibold mb-0">Plugins</h3>
+        <h3 className="text-lg font-semibold mb-0">提供商插件</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          Your AI coding lineup
+          启用或关闭 AI 提供商
         </p>
         <div className="bg-muted/50 rounded-lg p-1 space-y-1">
           <DndContext

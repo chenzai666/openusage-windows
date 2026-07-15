@@ -27,10 +27,10 @@ describe("SideNav", () => {
     const onViewChange = vi.fn()
     render(<SideNav activeView="home" onViewChange={onViewChange} plugins={[]} />)
 
-    await userEvent.click(screen.getByRole("button", { name: "Settings" }))
+    await userEvent.click(screen.getByRole("button", { name: "设置" }))
     expect(onViewChange).toHaveBeenCalledWith("settings")
 
-    await userEvent.click(screen.getByRole("button", { name: "Home" }))
+    await userEvent.click(screen.getByRole("button", { name: "首页" }))
     expect(onViewChange).toHaveBeenCalledWith("home")
   })
 
@@ -85,7 +85,7 @@ describe("SideNav", () => {
     const onViewChange = vi.fn()
     render(<SideNav activeView="home" onViewChange={onViewChange} plugins={[]} />)
 
-    await userEvent.click(screen.getByRole("button", { name: "Help" }))
+    await userEvent.click(screen.getByRole("button", { name: "帮助" }))
 
     expect(openUrl).toHaveBeenCalledWith("https://github.com/robinebers/openusage/issues")
     expect(invoke).toHaveBeenCalledWith("hide_panel")
