@@ -208,6 +208,11 @@ fn hide_panel(app_handle: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn reanchor_panel(app_handle: tauri::AppHandle) {
+    panel::reanchor_panel(&app_handle);
+}
+
+#[tauri::command]
 fn open_devtools(#[allow(unused)] app_handle: tauri::AppHandle) {
     #[cfg(debug_assertions)]
     {
@@ -539,6 +544,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             init_panel,
             hide_panel,
+            reanchor_panel,
             open_devtools,
             start_probe_batch,
             list_plugins,

@@ -320,6 +320,50 @@ describe("usePanel", () => {
     expect(setActiveView).toHaveBeenCalledWith("b")
   })
 
+  it("reanchors to the tray after content resize instead of drifting up", async () => {
+    const { render } = await import("@testing-library/react")
+    const React = await import("react")
+
+    const setSize = vi.fn().mockResolvedValue(undefined)
+    const setPosition = vi.fn().mockResolvedValue(undefined)
+    getCurrentWindowMock.mockReturnValue({
+      setSize,
+      setPosition,
+      outerSize: vi.fn().mockResolvedValue({ width: 800, height: 900 }),
+      outerPosition: vi.fn().mockResolvedValue({ x: 100, y: 50 }),
+    })
+    currentMonitorMock.mockResolvedValue({
+      size: { width: 1920, height: 1080 },
+    })
+    invokeMock.mockClear()
+    invokeMock.mockResolvedValue(undefined)
+
+    function HostWithRef() {
+      const panel = usePanel({
+        activeView: "settings",
+        setActiveView: vi.fn(),
+        showAbout: false,
+        setShowAbout: vi.fn(),
+        displayPlugins: [],
+      })
+      return React.createElement("div", {
+        ref: panel.containerRef,
+        style: { height: 360 },
+      })
+    }
+
+    render(React.createElement(HostWithRef))
+
+    await waitFor(() => {
+      expect(setSize).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("reanchor_panel")
+    })
+    // Primary path is tray reanchor, not fragile post-setSize delta moves.
+    expect(setPosition).not.toHaveBeenCalled()
+  })
+
   it("focuses the panel container when the window regains focus", () => {
     const requestAnimationFrameSpy = vi
       .spyOn(window, "requestAnimationFrame")

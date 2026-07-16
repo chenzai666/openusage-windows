@@ -159,8 +159,14 @@ export function usePanel({
     const container = containerRef.current
     if (!container) return
 
-    const resizeWindow = async () => {
-      const factor = window.devicePixelRatio
+    // Serialize resizes: concurrent ResizeObserver callbacks used to interleave
+    // setSize + delta setPosition and fling the panel to the top of the screen.
+    let cancelled = false
+    let running = false
+    let pending = false
+
+    const applyResize = async () => {
+      const factor = window.devicePixelRatio || 1
       const width = Math.ceil(PANEL_WIDTH * factor)
       const desiredHeightLogical = Math.max(1, container.scrollHeight)
 
@@ -177,7 +183,7 @@ export function usePanel({
         // fall through to fallback
       }
 
-      if (maxHeightLogical === null) {
+      if (maxHeightLogical === null || maxHeightPhysical === null) {
         const screenAvailHeight = Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX
         maxHeightLogical = Math.floor(screenAvailHeight * MAX_HEIGHT_FRACTION_OF_MONITOR)
         maxHeightPhysical = Math.floor(maxHeightLogical * factor)
@@ -189,35 +195,81 @@ export function usePanel({
       }
 
       const desiredHeightPhysical = Math.ceil(desiredHeightLogical * factor)
-      const height = Math.ceil(Math.min(desiredHeightPhysical, maxHeightPhysical!))
+      const height = Math.ceil(Math.min(desiredHeightPhysical, maxHeightPhysical))
 
       try {
         const currentWindow = getCurrentWindow()
-        // Keep the bottom edge fixed when shrinking/growing so the panel
-        // stays glued to the Windows tray / taskbar after content-size resize.
+
+        // Snapshot geometry BEFORE setSize — Windows keeps top-left fixed when
+        // resizing, so we need the pre-resize origin for a correct bottom anchor.
         let previousHeight = height
+        let previousPos: { x: number; y: number } | null = null
         try {
-          previousHeight = (await currentWindow.outerSize()).height
+          const [size, pos] = await Promise.all([
+            currentWindow.outerSize(),
+            currentWindow.outerPosition(),
+          ])
+          previousHeight = size.height
+          previousPos = { x: pos.x, y: pos.y }
         } catch {
-          // ignore
+          // ignore — reanchor below is the primary path
         }
 
-        await currentWindow.setSize(new PhysicalSize(width, height))
-
-        const delta = previousHeight - height
-        if (delta !== 0) {
+        if (previousHeight !== height || previousPos === null) {
+          await currentWindow.setSize(new PhysicalSize(width, height))
+        } else {
+          // Width may still need a DPI correction even when height is stable.
           try {
-            const pos = await currentWindow.outerPosition()
-            await currentWindow.setPosition(
-              new PhysicalPosition(pos.x, pos.y + delta)
-            )
+            const currentWidth = (await currentWindow.outerSize()).width
+            if (currentWidth !== width) {
+              await currentWindow.setSize(new PhysicalSize(width, height))
+            }
           } catch {
-            // Positioning is best-effort; size is more important.
+            await currentWindow.setSize(new PhysicalSize(width, height))
+          }
+        }
+
+        // Prefer re-snapping to the tray / taskbar (authoritative). Falls back to
+        // bottom-edge delta if the tray rect is not available yet.
+        try {
+          await invoke("reanchor_panel")
+        } catch {
+          if (previousPos !== null) {
+            const delta = previousHeight - height
+            if (delta !== 0) {
+              try {
+                await currentWindow.setPosition(
+                  new PhysicalPosition(previousPos.x, previousPos.y + delta)
+                )
+              } catch {
+                // Positioning is best-effort; size is more important.
+              }
+            }
           }
         }
       } catch (e) {
         console.error("Failed to resize window:", e)
       }
+    }
+
+    const resizeWindow = () => {
+      if (cancelled) return
+      if (running) {
+        pending = true
+        return
+      }
+      running = true
+      void (async () => {
+        try {
+          do {
+            pending = false
+            if (cancelled) return
+            await applyResize()
+          } while (pending && !cancelled)
+        } finally {
+          running = false
+        }
+      })()
     }
 
     resizeWindow()
@@ -227,7 +279,10 @@ export function usePanel({
     })
     observer.observe(container)
 
-    return () => observer.disconnect()
+    return () => {
+      cancelled = true
+      observer.disconnect()
+    }
   }, [activeView, displayPlugins])
 
   useEffect(() => {

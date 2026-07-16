@@ -84,6 +84,12 @@ pub fn show_panel(app_handle: &AppHandle) {
     }
 }
 
+/// Re-anchor the (already visible) panel to the tray / taskbar after a content
+/// resize. Safe no-op if the tray rect is unavailable.
+pub fn reanchor_panel(app_handle: &AppHandle) {
+    position_panel_from_tray(app_handle);
+}
+
 /// Hide the panel if present.
 pub fn hide_panel(app_handle: &AppHandle) {
     if let Some(window) = app_handle.get_webview_window("main") {
@@ -203,69 +209,49 @@ pub fn position_panel_at_tray_icon(
         }
     };
 
-    let target_scale = monitor.scale_factor();
     let mon_phys_x = monitor.position().x as f64;
     let mon_phys_y = monitor.position().y as f64;
     let mon_phys_w = monitor.size().width as f64;
     let mon_phys_h = monitor.size().height as f64;
-    let mon_logical_x = mon_phys_x / target_scale;
-    let mon_logical_y = mon_phys_y / target_scale;
-    let mon_logical_w = mon_phys_w / target_scale;
-    let mon_logical_h = mon_phys_h / target_scale;
 
-    let icon_logical_x = mon_logical_x + (icon_phys_x - mon_phys_x) / target_scale;
-    let icon_logical_y = mon_logical_y + (icon_phys_y - mon_phys_y) / target_scale;
-    let icon_logical_w = icon_phys_w / target_scale;
-    let icon_logical_h = icon_phys_h / target_scale;
-
-    // Read panel width from the window, converted to logical points.
-    let panel_width = match (window.outer_size(), window.scale_factor()) {
-        (Ok(s), Ok(win_scale)) if win_scale > 0.0 => s.width as f64 / win_scale,
-        _ => {
+    // Prefer physical outer size so DPI scaling matches frontend setSize(PhysicalSize).
+    let (panel_phys_w, panel_phys_h) = match window.outer_size() {
+        Ok(s) => (s.width as f64, s.height as f64),
+        Err(_) => {
             let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
                 .expect("tauri.conf.json must be valid JSON");
-            conf["app"]["windows"][0]["width"]
-                .as_f64()
-                .expect("width must be set in tauri.conf.json")
+            let scale = monitor.scale_factor().max(0.1);
+            let w = conf["app"]["windows"][0]["width"].as_f64().unwrap_or(400.0) * scale;
+            let h = conf["app"]["windows"][0]["height"].as_f64().unwrap_or(360.0) * scale;
+            (w, h)
         }
     };
 
-    let panel_height = match (window.outer_size(), window.scale_factor()) {
-        (Ok(s), Ok(win_scale)) if win_scale > 0.0 => s.height as f64 / win_scale,
-        _ => {
-            let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
-                .expect("tauri.conf.json must be valid JSON");
-            conf["app"]["windows"][0]["height"]
-                .as_f64()
-                .unwrap_or(500.0)
-        }
-    };
+    let icon_center_x = icon_phys_x + (icon_phys_w / 2.0);
+    let mut panel_x = icon_center_x - (panel_phys_w / 2.0);
 
-    let icon_center_x = icon_logical_x + (icon_logical_w / 2.0);
-    let mut panel_x = icon_center_x - (panel_width / 2.0);
-
-    // Clamp horizontally inside the monitor work area.
+    // Clamp horizontally inside the monitor bounds (physical px).
+    let margin = 8.0;
     panel_x = panel_x
-        .max(mon_logical_x + 8.0)
-        .min(mon_logical_x + mon_logical_w - panel_width - 8.0);
+        .max(mon_phys_x + margin)
+        .min(mon_phys_x + mon_phys_w - panel_phys_w - margin);
 
-    // Windows tray is typically at the bottom of the screen. Prefer placing
-    // the panel just above the tray icon; fall back to below if there isn't room.
-    // Small gap so the panel sits close to the taskbar (frontend re-anchors
-    // after content-size resize so the bottom edge stays put).
+    // Windows tray is typically at the bottom. Place the panel just above the
+    // tray icon so the bottom edge stays glued to the taskbar after resizes.
     let gap: f64 = 4.0;
-    let above_y = icon_logical_y - panel_height - gap;
-    let below_y = icon_logical_y + icon_logical_h + gap;
-    let panel_y = if above_y >= mon_logical_y + 4.0 {
+    let above_y = icon_phys_y - panel_phys_h - gap;
+    let below_y = icon_phys_y + icon_phys_h + gap;
+    let panel_y = if above_y >= mon_phys_y + margin {
         above_y
     } else {
+        // Top/side taskbar fallback: sit below the icon, still on-screen.
         below_y
-            .min(mon_logical_y + mon_logical_h - panel_height - 4.0)
-            .max(mon_logical_y + 4.0)
+            .min(mon_phys_y + mon_phys_h - panel_phys_h - margin)
+            .max(mon_phys_y + margin)
     };
 
-    let _ = window.set_position(Position::Logical(tauri::LogicalPosition {
-        x: panel_x,
-        y: panel_y,
+    let _ = window.set_position(Position::Physical(tauri::PhysicalPosition {
+        x: panel_x.round() as i32,
+        y: panel_y.round() as i32,
     }));
 }

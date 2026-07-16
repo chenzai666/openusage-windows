@@ -169,13 +169,26 @@ vi.mock("@tauri-apps/api/path", () => ({
 }))
 
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ setSize: state.setSizeMock }),
+  getCurrentWindow: () => ({
+    setSize: state.setSizeMock,
+    setPosition: vi.fn().mockResolvedValue(undefined),
+    outerSize: vi.fn().mockResolvedValue({ width: 400, height: 500 }),
+    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+  }),
   PhysicalSize: class {
     width: number
     height: number
     constructor(width: number, height: number) {
       this.width = width
       this.height = height
+    }
+  },
+  PhysicalPosition: class {
+    x: number
+    y: number
+    constructor(x: number, y: number) {
+      this.x = x
+      this.y = y
     }
   },
   currentMonitor: state.currentMonitorMock,
