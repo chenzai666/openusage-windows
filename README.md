@@ -102,7 +102,7 @@ npm run tauri:dev
 
 ```json
 {
-  "proxy": "socks5://127.0.0.1:1080"
+  "proxy": "socks5://127.0.0.1:10808"
 }
 ```
 
