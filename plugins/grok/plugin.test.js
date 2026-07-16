@@ -230,6 +230,57 @@ describe("grok plugin", () => {
     expect(line.color).toBe("#22c55e")
   })
 
+  it("still renders 周限额 when resetsAt cannot be derived", async () => {
+    const ctx = makeCtx()
+    writeAuth(ctx)
+    mockGrokApi(ctx, {
+      credits: creditsBillingData({
+        currentPeriod: { type: "USAGE_PERIOD_TYPE_WEEKLY" },
+        billingPeriodStart: null,
+        billingPeriodEnd: null,
+        creditUsagePercent: 33,
+      }),
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    const weekly = result.lines.find((l) => l.label === "周限额")
+    expect(weekly).toBeTruthy()
+    expect(weekly.used).toBe(33)
+    expect(weekly.resetsAt).toBeUndefined()
+  })
+
+  it("retries credits billing once after a transient failure", async () => {
+    const ctx = makeCtx()
+    writeAuth(ctx)
+    let creditsCalls = 0
+    ctx.host.http.request.mockImplementation((req) => {
+      const url = String(req.url || "")
+      if (url.includes("format=credits")) {
+        creditsCalls += 1
+        if (creditsCalls === 1) {
+          return { status: 502, bodyText: "bad gateway" }
+        }
+        return { status: 200, bodyText: JSON.stringify(creditsBillingData()) }
+      }
+      if (url === BILLING_URL || (url.startsWith(BILLING_URL) && !url.includes("format=credits"))) {
+        return { status: 200, bodyText: JSON.stringify(monthlyBillingData()) }
+      }
+      if (url === SETTINGS_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ subscription_tier_display: "SuperGrok" }),
+        }
+      }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(creditsCalls).toBe(2)
+    expect(result.lines.find((l) => l.label === "周限额")).toBeTruthy()
+  })
+
   it("still works when credits endpoint fails but monthly succeeds", async () => {
     const ctx = makeCtx()
     writeAuth(ctx)

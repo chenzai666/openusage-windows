@@ -288,12 +288,10 @@
     if (!creditsConfig || typeof creditsConfig !== "object") return lines
 
     const period = creditsConfig.currentPeriod
-    const isWeekly =
-      period &&
-      typeof period === "object" &&
-      (period.type === "USAGE_PERIOD_TYPE_WEEKLY" ||
-        creditsConfig.isUnifiedBillingUser === true)
-
+    // credits?format=credits is the weekly shared pool. Show 周限额 whenever
+    // creditUsagePercent is present — do not require resetsAt (toIso can fail on
+    // rare date shapes and previously caused the whole row to vanish after the
+    // loading skeleton flashed 「周限额」).
     const usagePercent = Number(creditsConfig.creditUsagePercent)
     const hasUsage = Number.isFinite(usagePercent)
     const periodEnd = period && period.end ? period.end : creditsConfig.billingPeriodEnd
@@ -306,18 +304,19 @@
       ? formatShortRange(ctx, periodStart, periodEnd)
       : null
 
-    if (isWeekly && hasUsage && resetsAt) {
-      lines.push(
-        ctx.line.progress({
-          label: "周限额",
-          used: clampPercent(usagePercent),
-          limit: 100,
-          format: { kind: "percent" },
-          resetsAt: resetsAt,
-          periodDurationMs: durationMs,
-          color: "#22c55e",
-        })
-      )
+    if (hasUsage) {
+      const weeklyOpts = {
+        label: "周限额",
+        used: clampPercent(usagePercent),
+        limit: 100,
+        format: { kind: "percent" },
+        color: "#22c55e",
+      }
+      if (resetsAt) {
+        weeklyOpts.resetsAt = resetsAt
+        if (durationMs) weeklyOpts.periodDurationMs = durationMs
+      }
+      lines.push(ctx.line.progress(weeklyOpts))
       if (rangeText) {
         lines.push(
           ctx.line.text({
@@ -435,16 +434,31 @@
       })
     }
 
-    // Weekly / product pool (unified billing)
-    let creditsConfig = null
-    try {
+    // Weekly / product pool (unified billing). Retry once — transient proxy/network
+    // blips previously left users with skeleton「周限额」then only monthly lines.
+    function fetchCreditsConfig() {
       const creditsResp = requestWithRetry(BILLING_CREDITS_URL)
       const creditsData = parseBilling(ctx, creditsResp)
-      creditsConfig = creditsData && creditsData.config
+      const cfg = creditsData && creditsData.config
+      if (!cfg || typeof cfg !== "object") {
+        throw "Grok credits billing config missing."
+      }
+      return cfg
+    }
+
+    let creditsConfig = null
+    try {
+      creditsConfig = fetchCreditsConfig()
     } catch (e) {
-      // Non-fatal if weekly endpoint fails; monthly may still work
       if (typeof e === "string" && e === LOGIN_HINT) throw e
-      ctx.host.log.warn("Grok credits billing unavailable: " + String(e))
+      ctx.host.log.warn("Grok credits billing first attempt failed: " + String(e))
+      try {
+        creditsConfig = fetchCreditsConfig()
+        ctx.host.log.info("Grok credits billing succeeded on retry")
+      } catch (e2) {
+        if (typeof e2 === "string" && e2 === LOGIN_HINT) throw e2
+        ctx.host.log.warn("Grok credits billing unavailable: " + String(e2))
+      }
     }
 
     // Monthly included credits (units → dollars)
