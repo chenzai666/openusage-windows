@@ -13,6 +13,10 @@ import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
 const PANEL_WIDTH = 400
 const MAX_HEIGHT_FALLBACK_PX = 600
 const MAX_HEIGHT_FRACTION_OF_MONITOR = 0.8
+/** Ignore sub-pixel / DPI jitter so we don't fight the window manager. */
+const SIZE_EPSILON_PX = 2
+/** Coalesce rapid layout thrash when switching providers / probe results paint. */
+const RESIZE_DEBOUNCE_MS = 48
 
 type UsePanelArgs = {
   activeView: ActiveView
@@ -45,6 +49,10 @@ export function usePanel({
   const [canScrollDown, setCanScrollDown] = useState(false)
   const [maxPanelHeightPx, setMaxPanelHeightPx] = useState<number | null>(null)
   const maxPanelHeightPxRef = useRef<number | null>(null)
+  /** Physical Y of the panel's bottom edge — stays fixed while switching providers. */
+  const bottomEdgePhysRef = useRef<number | null>(null)
+  /** Latest scheduled resize entry point (set by the resize effect). */
+  const scheduleResizeRef = useRef<(() => void) | null>(null)
   const focusContainer = useCallback(() => {
     window.requestAnimationFrame(() => {
       containerRef.current?.focus({ preventScroll: true })
@@ -111,6 +119,18 @@ export function usePanel({
         return
       }
       unlisteners.push(u2)
+
+      // Rust positions to the tray on show/toggle — drop the bottom lock so the
+      // next content resize re-captures from the tray-aligned geometry.
+      const u3 = await listen("tray:panel-shown", () => {
+        bottomEdgePhysRef.current = null
+        scheduleResizeRef.current?.()
+      })
+      if (cancelled) {
+        u3()
+        return
+      }
+      unlisteners.push(u3)
     }
 
     void setup()
@@ -154,136 +174,166 @@ export function usePanel({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [activeView, displayPlugins, setActiveView, showAbout])
 
+  // Size the native window to content. Keep the BOTTOM edge fixed so the panel
+  // stays glued to the taskbar while switching AI providers (height changes a lot).
+  // Do NOT re-query tray.rect() here — on Windows it is flaky and was flinging
+  // the window to the top. Tray snap only happens in Rust on show/toggle.
   useEffect(() => {
     if (!isTauri()) return
     const container = containerRef.current
     if (!container) return
 
-    // Serialize resizes: concurrent ResizeObserver callbacks used to interleave
-    // setSize + delta setPosition and fling the panel to the top of the screen.
     let cancelled = false
     let running = false
     let pending = false
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    const applyResize = async () => {
+    const measureMaxHeight = async (): Promise<{ logical: number; physical: number }> => {
       const factor = window.devicePixelRatio || 1
-      const width = Math.ceil(PANEL_WIDTH * factor)
-      const desiredHeightLogical = Math.max(1, container.scrollHeight)
-
-      let maxHeightPhysical: number | null = null
-      let maxHeightLogical: number | null = null
-
       try {
         const monitor = await currentMonitor()
         if (monitor) {
-          maxHeightPhysical = Math.floor(monitor.size.height * MAX_HEIGHT_FRACTION_OF_MONITOR)
-          maxHeightLogical = Math.floor(maxHeightPhysical / factor)
+          const physical = Math.floor(monitor.size.height * MAX_HEIGHT_FRACTION_OF_MONITOR)
+          return { physical, logical: Math.floor(physical / factor) }
         }
       } catch {
-        // fall through to fallback
+        // fall through
       }
+      const screenAvailHeight = Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX
+      const logical = Math.floor(screenAvailHeight * MAX_HEIGHT_FRACTION_OF_MONITOR)
+      return { logical, physical: Math.floor(logical * factor) }
+    }
 
-      if (maxHeightLogical === null || maxHeightPhysical === null) {
-        const screenAvailHeight = Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX
-        maxHeightLogical = Math.floor(screenAvailHeight * MAX_HEIGHT_FRACTION_OF_MONITOR)
-        maxHeightPhysical = Math.floor(maxHeightLogical * factor)
-      }
+    const applyResize = async () => {
+      if (cancelled || !containerRef.current) return
+      const el = containerRef.current
+      const factor = window.devicePixelRatio || 1
+      const width = Math.ceil(PANEL_WIDTH * factor)
+      const desiredHeightLogical = Math.max(1, el.scrollHeight)
 
-      if (maxPanelHeightPxRef.current !== maxHeightLogical) {
-        maxPanelHeightPxRef.current = maxHeightLogical
-        setMaxPanelHeightPx(maxHeightLogical)
+      const maxH = await measureMaxHeight()
+      if (cancelled) return
+
+      if (maxPanelHeightPxRef.current !== maxH.logical) {
+        maxPanelHeightPxRef.current = maxH.logical
+        setMaxPanelHeightPx(maxH.logical)
       }
 
       const desiredHeightPhysical = Math.ceil(desiredHeightLogical * factor)
-      const height = Math.ceil(Math.min(desiredHeightPhysical, maxHeightPhysical))
+      const height = Math.ceil(Math.min(desiredHeightPhysical, maxH.physical))
 
       try {
         const currentWindow = getCurrentWindow()
+        const [size, pos] = await Promise.all([
+          currentWindow.outerSize(),
+          currentWindow.outerPosition(),
+        ])
+        if (cancelled) return
 
-        // Snapshot geometry BEFORE setSize — Windows keeps top-left fixed when
-        // resizing, so we need the pre-resize origin for a correct bottom anchor.
-        let previousHeight = height
-        let previousPos: { x: number; y: number } | null = null
-        try {
-          const [size, pos] = await Promise.all([
-            currentWindow.outerSize(),
-            currentWindow.outerPosition(),
-          ])
-          previousHeight = size.height
-          previousPos = { x: pos.x, y: pos.y }
-        } catch {
-          // ignore — reanchor below is the primary path
+        // Lock bottom edge the first time we see a real on-screen position.
+        // Subsequent provider switches only move the top edge.
+        if (bottomEdgePhysRef.current === null) {
+          bottomEdgePhysRef.current = pos.y + size.height
         }
 
-        if (previousHeight !== height || previousPos === null) {
-          await currentWindow.setSize(new PhysicalSize(width, height))
-        } else {
-          // Width may still need a DPI correction even when height is stable.
-          try {
-            const currentWidth = (await currentWindow.outerSize()).width
-            if (currentWidth !== width) {
-              await currentWindow.setSize(new PhysicalSize(width, height))
-            }
-          } catch {
-            await currentWindow.setSize(new PhysicalSize(width, height))
-          }
+        const widthChanged = Math.abs(size.width - width) > SIZE_EPSILON_PX
+        const heightChanged = Math.abs(size.height - height) > SIZE_EPSILON_PX
+        if (!widthChanged && !heightChanged) {
+          return
         }
 
-        // Prefer re-snapping to the tray / taskbar (authoritative). Falls back to
-        // bottom-edge delta if the tray rect is not available yet.
+        const bottom = bottomEdgePhysRef.current
+        const nextY = Math.round(bottom - height)
+        const nextX = pos.x
+
+        // Size first (Windows keeps top-left), then snap top so bottom matches lock.
+        await currentWindow.setSize(new PhysicalSize(width, height))
+        if (cancelled) return
+        await currentWindow.setPosition(new PhysicalPosition(nextX, nextY))
+        if (cancelled) return
+
+        // Re-assert the lock from our intended bottom (not OS-clamped drift),
+        // unless the window was pushed fully off-monitor (then adopt OS result).
         try {
-          await invoke("reanchor_panel")
-        } catch {
-          if (previousPos !== null) {
-            const delta = previousHeight - height
-            if (delta !== 0) {
-              try {
-                await currentWindow.setPosition(
-                  new PhysicalPosition(previousPos.x, previousPos.y + delta)
-                )
-              } catch {
-                // Positioning is best-effort; size is more important.
-              }
-            }
+          const finalPos = await currentWindow.outerPosition()
+          const finalSize = await currentWindow.outerSize()
+          const intendedBottom = bottom
+          const actualBottom = finalPos.y + finalSize.height
+          // If OS honored our bottom within a few px, keep the locked value.
+          if (Math.abs(actualBottom - intendedBottom) <= 4) {
+            bottomEdgePhysRef.current = intendedBottom
+          } else {
+            // Large clamp (e.g. multi-monitor edge) — follow the OS.
+            bottomEdgePhysRef.current = actualBottom
           }
+        } catch {
+          // keep previous lock
         }
       } catch (e) {
         console.error("Failed to resize window:", e)
       }
     }
 
-    const resizeWindow = () => {
-      if (cancelled) return
+    const runLoop = async () => {
       if (running) {
         pending = true
         return
       }
       running = true
-      void (async () => {
-        try {
-          do {
-            pending = false
-            if (cancelled) return
-            await applyResize()
-          } while (pending && !cancelled)
-        } finally {
-          running = false
-        }
-      })()
+      try {
+        do {
+          pending = false
+          if (cancelled) return
+          await applyResize()
+        } while (pending && !cancelled)
+      } finally {
+        running = false
+      }
     }
 
-    resizeWindow()
+    const scheduleResize = () => {
+      if (cancelled) return
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null
+        void runLoop()
+      }, RESIZE_DEBOUNCE_MS)
+    }
+
+    scheduleResizeRef.current = scheduleResize
+    scheduleResize()
 
     const observer = new ResizeObserver(() => {
-      resizeWindow()
+      scheduleResize()
     })
     observer.observe(container)
 
     return () => {
       cancelled = true
+      scheduleResizeRef.current = null
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
       observer.disconnect()
     }
-  }, [activeView, displayPlugins])
+    // Intentionally empty deps: ResizeObserver covers content height changes.
+    // Re-binding on activeView/displayPlugins was re-snapping the window on every
+    // probe paint and looked like "乱飞" when clicking other AI providers.
+  }, [])
+
+  // After switching provider/settings, wait for React layout then resize once.
+  useEffect(() => {
+    if (!isTauri()) return
+    let raf1 = 0
+    let raf2 = 0
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        scheduleResizeRef.current?.()
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(raf1)
+      window.cancelAnimationFrame(raf2)
+    }
+  }, [activeView])
 
   useEffect(() => {
     const el = scrollRef.current

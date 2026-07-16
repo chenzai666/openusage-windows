@@ -233,6 +233,8 @@ pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
                     let _ = window.show();
                     position_panel_at_tray_icon(app_handle, rect.position, rect.size);
                     let _ = window.set_focus();
+                    // Tell the frontend to drop its bottom-edge lock and re-measure.
+                    crate::panel::notify_panel_shown(app_handle);
                 }
             }
         });

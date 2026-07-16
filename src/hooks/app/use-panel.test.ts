@@ -89,7 +89,8 @@ describe("usePanel", () => {
     )
 
     await waitFor(() => {
-      expect(listenMock).toHaveBeenCalledTimes(2)
+      // tray:navigate, tray:show-about, tray:panel-shown
+      expect(listenMock).toHaveBeenCalledTimes(3)
     })
 
     act(() => {
@@ -320,12 +321,13 @@ describe("usePanel", () => {
     expect(setActiveView).toHaveBeenCalledWith("b")
   })
 
-  it("reanchors to the tray after content resize instead of drifting up", async () => {
+  it("keeps the bottom edge fixed when content height changes", async () => {
     const { render } = await import("@testing-library/react")
     const React = await import("react")
 
     const setSize = vi.fn().mockResolvedValue(undefined)
     const setPosition = vi.fn().mockResolvedValue(undefined)
+    // Window currently 900px tall with top at y=50 → bottom edge = 950
     getCurrentWindowMock.mockReturnValue({
       setSize,
       setPosition,
@@ -338,9 +340,12 @@ describe("usePanel", () => {
     invokeMock.mockClear()
     invokeMock.mockResolvedValue(undefined)
 
+    const contentLogical = 360
+    Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 1 })
+
     function HostWithRef() {
       const panel = usePanel({
-        activeView: "settings",
+        activeView: "home",
         setActiveView: vi.fn(),
         showAbout: false,
         setShowAbout: vi.fn(),
@@ -348,20 +353,48 @@ describe("usePanel", () => {
       })
       return React.createElement("div", {
         ref: panel.containerRef,
-        style: { height: 360 },
+        // scrollHeight is read-only on HTMLElement; override via prototype trick:
+        // set a tall minHeight so layout scrollHeight is at least contentLogical.
+        style: { height: contentLogical, width: 400 },
       })
     }
 
-    render(React.createElement(HostWithRef))
+    // Patch scrollHeight for whatever node the hook observes.
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight"
+    )
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return contentLogical
+      },
+    })
 
-    await waitFor(() => {
-      expect(setSize).toHaveBeenCalled()
-    })
-    await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("reanchor_panel")
-    })
-    // Primary path is tray reanchor, not fragile post-setSize delta moves.
-    expect(setPosition).not.toHaveBeenCalled()
+    try {
+      render(React.createElement(HostWithRef))
+
+      // Debounce is 48ms — wait for the scheduled resize.
+      await waitFor(
+        () => {
+          expect(setSize).toHaveBeenCalled()
+          expect(setPosition).toHaveBeenCalled()
+        },
+        { timeout: 2000 }
+      )
+
+      // Bottom was 50+900=950; new height 360 → top should be 950-360=590
+      const lastPos = setPosition.mock.calls.at(-1)?.[0] as { x: number; y: number }
+      expect(lastPos.x).toBe(100)
+      expect(lastPos.y).toBe(950 - contentLogical)
+
+      // Must NOT re-query tray on every content resize (that flung the window up).
+      expect(invokeMock).not.toHaveBeenCalledWith("reanchor_panel")
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight)
+      }
+    }
   })
 
   it("focuses the panel container when the window regains focus", () => {

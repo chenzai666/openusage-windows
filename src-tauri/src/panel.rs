@@ -4,7 +4,7 @@
 //! menu-bar panel. On Windows (and other non-macOS desktops) we use the
 //! standard Tauri webview window, positioned near the tray icon.
 
-use tauri::{AppHandle, Manager, Position, Size, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, Position, Size, WebviewWindow};
 
 fn monitor_contains_physical_point(
     origin_x: f64,
@@ -76,18 +76,32 @@ fn position_panel_from_tray(app_handle: &AppHandle) {
     }
 }
 
+/// Notify the webview that the panel was just snapped to the tray.
+/// Frontend drops its bottom-edge lock so the next content resize re-captures.
+pub fn notify_panel_shown(app_handle: &AppHandle) {
+    if let Err(e) = app_handle.emit("tray:panel-shown", ()) {
+        log::debug!("emit tray:panel-shown failed: {}", e);
+    }
+}
+
+fn emit_panel_shown(app_handle: &AppHandle) {
+    notify_panel_shown(app_handle);
+}
+
 /// Show the panel (initializing if needed), positioned under the tray icon.
 pub fn show_panel(app_handle: &AppHandle) {
     if let Some(window) = get_or_init_panel!(app_handle) {
         show_window(&window);
         position_panel_from_tray(app_handle);
+        emit_panel_shown(app_handle);
     }
 }
 
-/// Re-anchor the (already visible) panel to the tray / taskbar after a content
-/// resize. Safe no-op if the tray rect is unavailable.
+/// Re-anchor the (already visible) panel to the tray / taskbar.
+/// Used sparingly (e.g. explicit recovery) — not on every content resize.
 pub fn reanchor_panel(app_handle: &AppHandle) {
     position_panel_from_tray(app_handle);
+    emit_panel_shown(app_handle);
 }
 
 /// Hide the panel if present.
@@ -111,6 +125,7 @@ pub fn toggle_panel(app_handle: &AppHandle) {
         log::debug!("toggle_panel: showing panel");
         show_window(&window);
         position_panel_from_tray(app_handle);
+        emit_panel_shown(app_handle);
     }
 }
 
