@@ -17,6 +17,7 @@ import { clamp01, formatCountNumber, formatFixedPrecisionNumber } from "@/lib/ut
 import { calculateDeficit, calculatePaceStatus, type PaceStatus } from "@/lib/pace-status"
 import { buildPaceDetailText, formatDeficitText, formatRunsOutText, getPaceStatusText } from "@/lib/pace-tooltip"
 import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipText } from "@/lib/reset-tooltip"
+import { extractGrokPayload, GrokCardsView } from "@/components/grok-cards-view"
 
 interface ProviderCardProps {
   name: string
@@ -30,6 +31,8 @@ interface ProviderCardProps {
   lastManualRefreshAt?: number | null
   lastUpdatedAt?: number | null
   onRetry?: () => void
+  /** Open Grok account settings (design footer gear). */
+  onOpenGrokSettings?: () => void
   scopeFilter?: "overview" | "all"
   displayMode: DisplayMode
   resetTimerDisplayMode?: ResetTimerDisplayMode
@@ -105,6 +108,7 @@ export function ProviderCard({
   lastManualRefreshAt,
   lastUpdatedAt,
   onRetry,
+  onOpenGrokSettings,
   scopeFilter = "all",
   displayMode,
   resetTimerDisplayMode = "relative",
@@ -117,6 +121,9 @@ export function ProviderCard({
     return remaining > 0 ? remaining : 0
   }, [lastManualRefreshAt])
 
+  // Design-doc Grok multi-account cards (screenshot layout)
+  const grokPayload = useMemo(() => extractGrokPayload(lines), [lines])
+
   // Filter lines based on scope - match by label since runtime lines can differ from manifest
   const overviewLabels = new Set(
     skeletonLines
@@ -126,9 +133,9 @@ export function ProviderCard({
   const filteredSkeletonLines = scopeFilter === "all"
     ? skeletonLines
     : skeletonLines.filter(line => line.scope === "overview")
-  const filteredLines = scopeFilter === "all"
-    ? lines
-    : lines.filter(line => overviewLabels.has(line.label))
+  // Hide machine payload + when using Grok cards, skip legacy metric dump in overview
+  const filteredLines = (scopeFilter === "all" ? lines : lines.filter(line => overviewLabels.has(line.label)))
+    .filter((line) => !(line.type === "text" && line.label === "__grok_v1"))
 
   const hasResetCountdown = filteredLines.some(
     (line) => line.type === "progress" && Boolean(line.resetsAt)
@@ -303,7 +310,16 @@ export function ProviderCard({
           <SkeletonLines lines={filteredSkeletonLines} />
         )}
 
-        {hasStaleData && (
+        {hasStaleData && grokPayload && (
+          <GrokCardsView
+            payload={grokPayload}
+            onRetry={onRetry}
+            onOpenSettings={onOpenGrokSettings}
+            compact={scopeFilter === "overview"}
+          />
+        )}
+
+        {hasStaleData && !grokPayload && (
           <div className="space-y-3">
             {groupLinesByType(filteredLines).map((group, gi) =>
               group.kind === "text" ? (

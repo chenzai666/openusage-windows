@@ -2,7 +2,14 @@
 
 追踪 Grok / SuperGrok 订阅额度（周限额、Build、API 月额、按量付费），登录信息来自本机 Grok CLI。
 
-显示风格对齐 **SuperGrok 多账号卡片**：账号脱敏、接口探测（billing / settings / chat）、健康状态、周限额、Build、API 月额度、按量、订阅续费。
+显示风格对齐 **设计稿 / SuperGrok 多账号卡片**（见产品截图）：
+
+- 每账号一张卡：xAI 徽章、状态（正常/限制）、标签、邮箱脱敏  
+- `层级 N · SuperGrok · 刷新时间`  
+- 统一账单提示条  
+- 接口探测：成功/失败 + billing / settings / chat 标签  
+- 健康状态点条、周限额、Build 用量、API 月额度、按量已用/付费  
+- 底栏：测试 / 刷新 / 设置 / 删除 / 启用（托盘账号）
 
 > 反向工程的未公开 API，可能随时变更。
 

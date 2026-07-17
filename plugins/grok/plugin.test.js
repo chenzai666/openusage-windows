@@ -150,13 +150,13 @@ describe("grok plugin", () => {
     expect(plugin.__test.formatPlanWithTier("SuperGrok", 1)).toBe("层级 1 · SuperGrok")
   })
 
-  it("shows 层级 badge when access token JWT contains tier", async () => {
+  it("shows 层级 in plan and card when access token JWT contains tier", async () => {
     const ctx = makeCtx()
     // Minimal JWT: header.payload.sig — decodePayload only needs middle part
-    const payload = Buffer.from(
+    const payloadB64 = Buffer.from(
       JSON.stringify({ tier: 1, exp: 9999999999, email: "t@example.com" })
     ).toString("base64url")
-    const token = "eyJhbGciOiJub25lIn0." + payload + ".sig"
+    const token = "eyJhbGciOiJub25lIn0." + payloadB64 + ".sig"
     writeAuth(ctx, {
       "https://auth.x.ai::client": {
         key: token,
@@ -168,11 +168,12 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    const tierLine = result.lines.find((l) => l.label === "层级")
-    expect(tierLine).toBeTruthy()
-    expect(tierLine.text).toBe("层级 1")
     expect(result.plan).toContain("层级 1")
     expect(result.plan).toContain("SuperGrok")
+    const raw = result.lines.find((l) => l.label === "__grok_v1")
+    const data = JSON.parse(raw.value)
+    expect(data.accounts[0].tier).toBe(1)
+    expect(data.accounts[0].planLine).toContain("层级 1")
   })
 
   it("sends Grok CLI aligned headers on billing requests", async () => {
@@ -193,7 +194,7 @@ describe("grok plugin", () => {
     expect(headers["User-Agent"]).toBe("Grok CLI/0.2.93")
   })
 
-  it("runs billing + settings + chat probe and shows SuperGrok-style lines", async () => {
+  it("runs billing + settings + chat probe and emits design-doc card payload", async () => {
     const ctx = makeCtx()
     writeAuth(ctx)
     mockGrokApi(ctx, { chatStatus: 200 })
@@ -202,35 +203,30 @@ describe("grok plugin", () => {
     const result = plugin.probe(ctx)
     const labels = result.lines.map((l) => l.label)
 
-    expect(labels).toContain("账号")
-    expect(labels).toContain("接口探测")
-    expect(labels).toContain("探测明细")
-    expect(labels).toContain("周限额")
-    expect(labels).toContain("Build 用量")
-    expect(labels).toContain("API 月额度")
-    expect(labels).toContain("按量付费")
-    expect(labels).toContain("状态")
-    expect(labels).toContain("套餐")
+    // Structured payload for screenshot cards
+    expect(labels).toContain("__grok_v1")
+    const raw = result.lines.find((l) => l.label === "__grok_v1")
+    const payload = JSON.parse(raw.value)
+    expect(payload.v).toBe(1)
+    expect(payload.accounts).toHaveLength(1)
+    const card = payload.accounts[0]
+    expect(card.emailMasked).toContain("@example.com")
+    expect(card.weeklyPercent).toBe(22)
+    expect(card.buildPercent).toBe(22)
+    expect(card.apiUsed).toBe(1353)
+    expect(card.apiLimit).toBe(15000)
+    expect(card.probe.ok).toBe(3)
+    expect(card.probe.fail).toBe(0)
+    expect(card.probe.chat.ok).toBe(true)
+    expect(card.status).toBe("正常")
+    expect(card.payAsYouGo).toBe("未启用")
 
-    // Plan badge on card header includes 层级 when JWT has tier (mock token has none)
-    expect(result.plan).toBeTruthy()
-
-    const probe = result.lines.find((l) => l.label === "接口探测")
-    expect(probe.text).toContain("成功 3")
-    expect(probe.text).toContain("失败 0")
-
-    const detail = result.lines.find((l) => l.label === "探测明细")
-    expect(detail.value).toContain("billing ✓ 200")
-    expect(detail.value).toContain("chat ✓ 200")
-
-    const weekly = result.lines.find((l) => l.label === "周限额")
+    // Tray weekly candidate still present
+    const weekly = result.lines.find((l) => l.label === "周限额" && l.type === "progress")
     expect(weekly.used).toBe(22)
 
-    const account = result.lines.find((l) => l.label === "账号")
-    expect(account.value).toContain("***")
-    expect(account.value).toContain("@example.com")
+    expect(result.plan).toBeTruthy()
 
-    // chat endpoint was hit
     const urls = ctx.host.http.request.mock.calls.map((c) => c[0].url)
     expect(urls.some((u) => String(u).includes("/chat/completions"))).toBe(true)
   })
@@ -242,15 +238,13 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    const hint = result.lines.find((l) => l.label === "Chat 说明")
-    expect(hint).toBeTruthy()
-    expect(hint.value).toContain("403")
-
-    const probe = result.lines.find((l) => l.label === "接口探测")
-    expect(probe.text).toContain("失败 1")
+    const raw = result.lines.find((l) => l.label === "__grok_v1")
+    const payload = JSON.parse(raw.value)
+    expect(payload.accounts[0].probe.fail).toBe(1)
+    expect(payload.accounts[0].probe.note).toContain("403")
   })
 
-  it("probes multiple accounts and separates them", async () => {
+  it("probes multiple accounts into design payload cards", async () => {
     const ctx = makeCtx()
     writeAuth(ctx, {
       "https://auth.x.ai::a": {
@@ -268,11 +262,9 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    const labels = result.lines.map((l) => l.label)
-
-    expect(labels).toContain("账号 1/2")
-    expect(labels).toContain("账号 2/2")
-    expect(labels).toContain("——")
+    const raw = result.lines.find((l) => l.label === "__grok_v1")
+    const payload = JSON.parse(raw.value)
+    expect(payload.accounts).toHaveLength(2)
     expect(result.plan).toContain("2 账号")
   })
 

@@ -10,6 +10,7 @@
     { "label": "Usage", "url": "https://grok.com/?_s=usage" }
   ],
   "lines": [
+    { "type": "text", "label": "__grok_v1", "scope": "overview" },
     { "type": "text", "label": "账号", "scope": "overview" },
     { "type": "text", "label": "账号 1/1", "scope": "overview" },
     { "type": "text", "label": "账号 1/2", "scope": "overview" },

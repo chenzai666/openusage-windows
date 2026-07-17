@@ -6,6 +6,7 @@ import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/s
 interface OverviewPageProps {
   plugins: PluginDisplayState[]
   onRetryPlugin?: (pluginId: string) => void
+  onOpenGrokSettings?: () => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
@@ -15,6 +16,7 @@ interface OverviewPageProps {
 export function OverviewPage({
   plugins,
   onRetryPlugin,
+  onOpenGrokSettings,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode = "auto",
@@ -41,6 +43,9 @@ export function OverviewPage({
             lastManualRefreshAt={plugin.lastManualRefreshAt}
             lastUpdatedAt={plugin.lastUpdatedAt}
             onRetry={onRetryPlugin ? () => onRetryPlugin(plugin.meta.id) : undefined}
+            onOpenGrokSettings={
+              plugin.meta.id === "grok" ? onOpenGrokSettings : undefined
+            }
             scopeFilter="overview"
             displayMode={displayMode}
             resetTimerDisplayMode={resetTimerDisplayMode}

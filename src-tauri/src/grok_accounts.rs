@@ -498,6 +498,57 @@ pub fn cancel_device_login() {
     }
 }
 
+/// Remove an account entry from `~/.grok/auth.json` (and its meta slot).
+pub fn remove_account(app_data_dir: &Path, entry_key: &str) -> Result<(), String> {
+    let entry_key = entry_key.trim();
+    if entry_key.is_empty() {
+        return Err("entryKey 不能为空".into());
+    }
+    let path = auth_json_path().ok_or_else(|| "无法解析用户目录".to_string())?;
+    let mut auth = read_json_file(&path).unwrap_or_else(|| json!({}));
+    if let Some(obj) = auth.as_object_mut() {
+        if obj.remove(entry_key).is_none() {
+            return Err("账号不存在".into());
+        }
+    }
+    write_json_file(&path, &auth)?;
+
+    // Drop meta entry + clear tray if needed
+    let meta_p = meta_path(app_data_dir);
+    if let Some(mut meta) = read_json_file(&meta_p) {
+        if let Some(entries) = meta.get_mut("entries").and_then(|v| v.as_object_mut()) {
+            entries.remove(entry_key);
+        }
+        if meta.get("trayEntryKey").and_then(|v| v.as_str()) == Some(entry_key) {
+            meta.as_object_mut().map(|o| o.remove("trayEntryKey"));
+        }
+        let _ = write_json_file(&meta_p, &meta);
+    }
+    Ok(())
+}
+
+/// Mark which account is the tray-enabled one (stored in accounts-meta.json).
+pub fn set_tray_account(app_data_dir: &Path, entry_key: Option<String>) -> Result<(), String> {
+    let path = meta_path(app_data_dir);
+    let mut meta = read_json_file(&path).unwrap_or_else(|| json!({ "entries": {} }));
+    if !meta.is_object() {
+        meta = json!({ "entries": {} });
+    }
+    let obj = meta.as_object_mut().unwrap();
+    match entry_key {
+        Some(k) if !k.trim().is_empty() => {
+            obj.insert("trayEntryKey".into(), json!(k.trim()));
+        }
+        _ => {
+            obj.remove("trayEntryKey");
+        }
+    }
+    if !obj.contains_key("entries") {
+        obj.insert("entries".into(), json!({}));
+    }
+    write_json_file(&path, &meta)
+}
+
 pub fn poll_device_login() -> Result<GrokDeviceLoginStatus, String> {
     let (device_code, client_id, interval, expires_at, last_poll, cancelled) = {
         let guard = PENDING_LOGIN.lock().map_err(|_| "login lock poisoned")?;

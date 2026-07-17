@@ -688,6 +688,47 @@
     return { lines: lines, weeklyPercent: weeklyPercent }
   }
 
+  function emptyCard(base) {
+    return Object.assign(
+      {
+        entryKey: "",
+        title: "未命名",
+        emailMasked: "未命名账号",
+        labels: [],
+        status: "警告",
+        statusColor: "#f59e0b",
+        tier: null,
+        planName: null,
+        planLine: "",
+        refreshedAt: null,
+        unifiedNote: null,
+        probe: {
+          ok: 0,
+          fail: 0,
+          billing: null,
+          settings: null,
+          chat: null,
+          note: null,
+          testedAt: null,
+        },
+        weeklyPercent: null,
+        weeklyReset: null,
+        buildText: "接口未返回 Build 字段",
+        buildPercent: null,
+        apiUsed: null,
+        apiLimit: null,
+        apiPercent: null,
+        apiReset: null,
+        onDemandText: "已用 -- · US$0.00 / --",
+        payAsYouGo: "未启用",
+        parseSummary: null,
+        subscription: null,
+        enabled: false,
+      },
+      base || {}
+    )
+  }
+
   function probeOneAccount(ctx, account, meta, index, total) {
     const lines = []
     const em = entryMeta(meta, account.entryKey)
@@ -700,17 +741,35 @@
           return typeof x === "string" && x.trim()
         })
       : []
-    const labelText = labels.length ? " · " + labels.join(" / ") : ""
+    const emailMasked = maskEmail(email)
+    const title = labels.length > 0 ? labels[0] : emailMasked
+    const trayKey =
+      meta && typeof meta.trayEntryKey === "string" ? meta.trayEntryKey : null
+    const enabled = trayKey ? trayKey === account.entryKey : index === 0
+    const nowLabel = formatResetShort(ctx, ctx.nowIso) || ""
 
-    // --- Account header ---
+    const card = emptyCard({
+      entryKey: account.entryKey,
+      title: title,
+      emailMasked: emailMasked,
+      labels: labels,
+      enabled: enabled,
+      subscription: formatSubscriptionLine(em),
+      refreshedAt: nowLabel,
+    })
+
+    // --- Account header (fallback lines for non-Grok card UI) ---
     lines.push(
       ctx.line.text({
         label: total > 1 ? "账号 " + String(index + 1) + "/" + String(total) : "账号",
-        value: maskEmail(email) + labelText,
+        value: emailMasked + (labels.length ? " · " + labels.join(" / ") : ""),
       })
     )
 
     if (account.expired || !account.token) {
+      card.status = "需重新登录"
+      card.statusColor = "#ef4444"
+      card.probe.note = "invalid_grant / 凭证过期，请重新登录"
       lines.push(
         ctx.line.badge({
           label: "状态",
@@ -725,7 +784,7 @@
           color: "#ef4444",
         })
       )
-      return { lines: lines, plan: null, weeklyPercent: null, ok: false }
+      return { lines: lines, card: card, plan: null, weeklyPercent: null, ok: false }
     }
 
     // Force refresh on 403 by pre-refreshing if near expiry already handled;
@@ -781,14 +840,21 @@
     else failCount++
 
     const probeColor = failCount === 0 ? "#22c55e" : okCount === 0 ? "#ef4444" : "#f59e0b"
+    const testedAt = "测试于 " + (formatResetShort(ctx, ctx.nowIso) || "") + " · 刷新触发"
+    card.probe = {
+      ok: okCount,
+      fail: failCount,
+      billing: { ok: billingOk, code: billingCode },
+      settings: { ok: settingsOk, code: settingsResp.status || 0 },
+      chat: { ok: chatOk, code: chatStatus },
+      note: null,
+      testedAt: testedAt,
+    }
+
     lines.push(
       ctx.line.badge({
         label: "接口探测",
-        text:
-          "成功 " +
-          String(okCount) +
-          " · 失败 " +
-          String(failCount),
+        text: "成功 " + String(okCount) + " · 失败 " + String(failCount),
         color: probeColor,
       })
     )
@@ -806,24 +872,29 @@
       })
     )
 
+    const tier = readJwtTier(ctx, token)
+    const tierBadge = formatTierBadge(tier)
     if (!chatOk && chatStatus === 403) {
-      const tier = readJwtTier(ctx, token)
-      const tierBadge = formatTierBadge(tier)
+      card.probe.note =
+        "只读可用，对话被拒 (HTTP 403)" +
+        (tier != null ? " · JWT tier=" + String(tier) + "（社区反馈 tier=1 常被 gate）" : "")
       lines.push(
         ctx.line.text({
           label: "Chat 说明",
-          value:
-            "对话被拒 HTTP 403" +
-            (tierBadge ? " · " + tierBadge.text + (tierBadge.note ? "（" + tierBadge.note + "）" : "") : ""),
+          value: card.probe.note,
           color: "#f59e0b",
         })
       )
+    } else if (chatOk) {
+      card.probe.note = "只读 + 对话接口均可用"
     }
 
     const creditsConfig = parseBillingOk(ctx, creditsResp)
     const monthlyConfig = parseBillingOk(ctx, monthlyResp)
 
     if (!creditsConfig && !monthlyConfig) {
+      card.status = "警告"
+      card.statusColor = "#ef4444"
       lines.push(
         ctx.line.badge({
           label: "状态",
@@ -840,49 +911,128 @@
           })
         )
       }
-      return { lines: lines, plan: null, weeklyPercent: null, ok: false }
+      return { lines: lines, card: card, plan: null, weeklyPercent: null, ok: false }
     }
 
+    // Fill design-card fields from billing configs (screenshot layout)
+    const products =
+      creditsConfig && Array.isArray(creditsConfig.productUsage)
+        ? creditsConfig.productUsage
+        : []
+    const period = creditsConfig && creditsConfig.currentPeriod
+    const weeklyEnd =
+      period && period.end ? period.end : creditsConfig && creditsConfig.billingPeriodEnd
+    const weeklyStart =
+      period && period.start ? period.start : creditsConfig && creditsConfig.billingPeriodStart
+    const usagePercentRaw = creditsConfig ? Number(creditsConfig.creditUsagePercent) : NaN
+    const hasWeeklyPercent = Number.isFinite(usagePercentRaw)
+    const weeklyPercent = hasWeeklyPercent ? clampPercent(usagePercentRaw) : null
+    const isUnified = !!(creditsConfig && creditsConfig.isUnifiedBillingUser === true)
+
+    if (isUnified) {
+      card.unifiedNote = hasWeeklyPercent
+        ? "统一账单账号：周限百分比已返回；已显示 Build/API/月额度（若接口有）"
+        : "统一账单账号：周限百分比未返回；已显示 Build/API/月额度（若接口有）"
+    }
+
+    card.weeklyPercent = weeklyPercent
+    card.weeklyReset = weeklyEnd ? formatResetShort(ctx, weeklyEnd) : null
+
+    const build = findProduct(products, "GrokBuild")
+    if (build && Number.isFinite(Number(build.usagePercent))) {
+      card.buildPercent = clampPercent(Number(build.usagePercent))
+      card.buildText = null
+    } else {
+      card.buildText = "接口未返回 Build 字段"
+      card.buildPercent = null
+    }
+
+    if (monthlyConfig) {
+      const usedUnits = unitsValue(monthlyConfig.used)
+      const limitUnits = unitsValue(monthlyConfig.monthlyLimit)
+      if (usedUnits !== null && limitUnits !== null && limitUnits > 0) {
+        card.apiUsed = usedUnits
+        card.apiLimit = limitUnits
+        card.apiPercent = clampPercent((usedUnits / limitUnits) * 100)
+        card.apiReset = monthlyConfig.billingPeriodEnd
+          ? formatResetShort(ctx, monthlyConfig.billingPeriodEnd)
+          : null
+      }
+    }
+
+    const onDemandUsedUnits =
+      creditsConfig && unitsValue(creditsConfig.onDemandUsed) !== null
+        ? unitsValue(creditsConfig.onDemandUsed)
+        : monthlyConfig
+          ? unitsValue(monthlyConfig.onDemandUsed)
+          : null
+    const onDemandCapUnits =
+      creditsConfig && unitsValue(creditsConfig.onDemandCap) !== null
+        ? unitsValue(creditsConfig.onDemandCap)
+        : monthlyConfig
+          ? unitsValue(monthlyConfig.onDemandCap)
+          : null
+    const usedUsd =
+      onDemandUsedUnits !== null ? (onDemandUsedUnits / CENTS_PER_DOLLAR).toFixed(2) : "0.00"
+    const capPart =
+      onDemandCapUnits !== null && onDemandCapUnits > 0
+        ? "US$" + (onDemandCapUnits / CENTS_PER_DOLLAR).toFixed(2)
+        : "--"
+    const odReset = card.weeklyReset ? " · 重置 " + card.weeklyReset : ""
+    card.onDemandText =
+      "已用 -- · US$" + usedUsd + " / " + capPart + odReset
+    card.payAsYouGo =
+      onDemandCapUnits !== null && onDemandCapUnits > 0
+        ? "上限 US$" + (onDemandCapUnits / CENTS_PER_DOLLAR).toFixed(2)
+        : "未启用"
+
+    // Parse summary like screenshot
+    const hasW = weeklyPercent !== null
+    const hasB = card.buildPercent !== null
+    const hasA = card.apiUsed !== null
+    card.parseSummary =
+      "解析 " +
+      String((hasW ? 1 : 0) + (hasB ? 1 : 0) + (hasA ? 1 : 0) + 1) +
+      " 条 · 周限" +
+      (hasW ? "✓" : "✗") +
+      " · Build" +
+      (hasB ? "✓" : "✗") +
+      " · API" +
+      (hasA ? "✓" : "✗") +
+      " · 原始数据 plugins_data/grok"
+
+    // Keep fallback metric lines for tray + legacy list UI
     const usage = buildUsageLines(ctx, creditsConfig, monthlyConfig)
     for (let i = 0; i < usage.lines.length; i++) lines.push(usage.lines[i])
 
-    // Account status badge based on weekly usage
-    const weeklyPercent = usage.weeklyPercent
     if (weeklyPercent !== null) {
       const limited = weeklyPercent >= 90
+      card.status = limited ? "限制" : "正常"
+      card.statusColor = limited ? "#f59e0b" : "#22c55e"
       lines.push(
         ctx.line.badge({
           label: "状态",
-          text: limited ? "限制" : "正常",
-          color: limited ? "#f59e0b" : "#22c55e",
+          text: card.status,
+          color: card.statusColor,
         })
       )
+    } else {
+      card.status = "正常"
+      card.statusColor = "#22c55e"
     }
 
-    // Manual subscription renew
-    const subLine = formatSubscriptionLine(em)
-    if (subLine) {
-      lines.push(
-        ctx.line.text({
-          label: "订阅续费",
-          value: subLine,
-        })
-      )
-    }
-
-    // Settings plan + JWT 层级 (tier)
     let planName = null
     if (settingsOk) {
       const data = ctx.util.tryParseJson(settingsResp.bodyText)
       const p = data && data.subscription_tier_display
       if (typeof p === "string" && p.trim()) planName = p.trim()
     }
-    const tier = readJwtTier(ctx, token)
-    const tierBadge = formatTierBadge(tier)
-    const teamId = readJwtTeamId(ctx, token)
+    card.tier = tier
+    card.planName = planName
     const plan = formatPlanWithTier(planName, tier)
+    card.planLine =
+      plan + (card.refreshedAt ? " · 刷新 " + card.refreshedAt : "")
 
-    // Show 层级 as its own badge (screenshot-style hierarchy), then 套餐 name.
     if (tierBadge) {
       lines.push(
         ctx.line.badge({
@@ -891,38 +1041,17 @@
           color: tierBadge.color,
         })
       )
-      if (tierBadge.note) {
-        lines.push(
-          ctx.line.text({
-            label: "层级说明",
-            value: tierBadge.note,
-            color: "#a3a3a3",
-          })
-        )
-      }
     }
-
     if (planName) {
       lines.push(ctx.line.text({ label: "套餐", value: planName }))
-    } else if (plan) {
-      lines.push(ctx.line.text({ label: "套餐", value: plan }))
     }
-
-    if (teamId) {
-      // Short team id for multi-account discrimination (not secret, but keep compact).
-      const shortTeam =
-        teamId.length > 12 ? teamId.slice(0, 8) + "…" + teamId.slice(-4) : teamId
-      lines.push(
-        ctx.line.text({
-          label: "团队",
-          value: shortTeam,
-          color: "#a3a3a3",
-        })
-      )
+    if (card.subscription) {
+      lines.push(ctx.line.text({ label: "订阅续费", value: card.subscription }))
     }
 
     return {
       lines: lines,
+      card: card,
       plan: plan,
       weeklyPercent: weeklyPercent,
       ok: true,
@@ -934,12 +1063,17 @@
     const meta = loadMeta(ctx)
     // Persist skeleton meta file so users can edit labels / subscription paste.
     if (!ctx.host.fs.exists(metaPath(ctx))) {
-      const seed = { entries: {}, _help: {
-        labels: "字符串数组，最多 8 个标签",
-        subscription_paste: "粘贴 Renews on July 18, 2026 · billed via Google Play",
-        subscription_renews_at: "dd/mm/YYYY 或 YYYY-MM-DD",
-        subscription_payment_method: "Google Play / App Store 等",
-      } }
+      const seed = {
+        entries: {},
+        trayEntryKey: accounts[0] ? accounts[0].entryKey : null,
+        _help: {
+          labels: "字符串数组，最多 8 个标签",
+          subscription_paste: "粘贴 Renews on July 18, 2026 · billed via Google Play",
+          subscription_renews_at: "dd/mm/YYYY 或 YYYY-MM-DD",
+          subscription_payment_method: "Google Play / App Store 等",
+          trayEntryKey: "托盘启用的账号 entryKey",
+        },
+      }
       for (let i = 0; i < accounts.length; i++) {
         seed.entries[accounts[i].entryKey] = entryMeta(meta, accounts[i].entryKey)
       }
@@ -947,35 +1081,74 @@
     }
 
     const allLines = []
+    const cards = []
     let primaryPlan = null
+    let primaryWeekly = null
+    let primaryWeeklyReset = null
+    let primaryWeeklyDuration = null
     let okAccounts = 0
 
     for (let i = 0; i < accounts.length; i++) {
-      if (i > 0) {
-        allLines.push(
-          ctx.line.text({
-            label: "——",
-            value: "—",
-            color: "#a3a3a3",
-          })
-        )
-      }
       const result = probeOneAccount(ctx, accounts[i], meta, i, accounts.length)
+      if (result.card) cards.push(result.card)
       for (let j = 0; j < result.lines.length; j++) allLines.push(result.lines[j])
       if (result.ok) okAccounts++
       if (!primaryPlan && result.plan) primaryPlan = result.plan
+      if (primaryWeekly === null && result.weeklyPercent !== null) {
+        primaryWeekly = result.weeklyPercent
+        if (result.card) {
+          primaryWeeklyReset = result.card.weeklyReset
+        }
+      }
     }
 
-    if (allLines.length === 0) {
+    if (cards.length === 0 && allLines.length === 0) {
       throw "Grok billing response changed."
+    }
+
+    // Structured payload for design-matching Grok cards UI
+    const payload = {
+      v: 1,
+      accounts: cards,
+      trayEntryKey:
+        typeof meta.trayEntryKey === "string" && meta.trayEntryKey
+          ? meta.trayEntryKey
+          : accounts[0]
+            ? accounts[0].entryKey
+            : null,
+    }
+    const structured = [
+      ctx.line.text({
+        label: "__grok_v1",
+        value: JSON.stringify(payload),
+      }),
+    ]
+    // Tray / menubar weekly candidate (first account with weekly data)
+    if (primaryWeekly !== null) {
+      structured.push(
+        ctx.line.progress({
+          label: "周限额",
+          used: primaryWeekly,
+          limit: 100,
+          format: { kind: "percent" },
+          color: healthColor(primaryWeekly),
+        })
+      )
     }
 
     const plan =
       accounts.length > 1
-        ? (primaryPlan || "Grok") + " · " + String(okAccounts) + "/" + String(accounts.length) + " 账号"
+        ? (primaryPlan || "Grok") +
+          " · " +
+          String(okAccounts) +
+          "/" +
+          String(accounts.length) +
+          " 账号"
         : primaryPlan || "Grok"
 
-    return { plan: plan, lines: allLines }
+    // Prefer structured + tray lines; keep human lines after for detail fallback
+    const lines = structured.concat(allLines)
+    return { plan: plan, lines: lines }
   }
 
   // Expose pure helpers for unit tests (optional)

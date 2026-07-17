@@ -99,6 +99,10 @@ export function AppContent({
       <OverviewPage
         plugins={displayPlugins}
         onRetryPlugin={onRetryPlugin}
+        onOpenGrokSettings={() => {
+          // Jump to settings where Grok account editor lives
+          useAppUiStore.getState().setActiveView("settings")
+        }}
         displayMode={displayMode}
         resetTimerDisplayMode={resetTimerDisplayMode}
         timeFormatMode={timeFormatMode}

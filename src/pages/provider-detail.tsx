@@ -40,6 +40,16 @@ export function ProviderDetailPage({
       lastManualRefreshAt={plugin.lastManualRefreshAt}
       lastUpdatedAt={plugin.lastUpdatedAt}
       onRetry={onRetry}
+      onOpenGrokSettings={
+        plugin.meta.id === "grok"
+          ? () => {
+              // Lazy import store to avoid circular deps in tests
+              void import("@/stores/app-ui-store").then(({ useAppUiStore }) => {
+                useAppUiStore.getState().setActiveView("settings")
+              })
+            }
+          : undefined
+      }
       scopeFilter="all"
       displayMode={displayMode}
       resetTimerDisplayMode={resetTimerDisplayMode}

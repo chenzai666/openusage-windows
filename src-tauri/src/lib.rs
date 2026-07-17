@@ -252,6 +252,30 @@ fn grok_cancel_device_login() {
 }
 
 #[tauri::command]
+fn grok_remove_account(
+    state: tauri::State<'_, Mutex<AppState>>,
+    entry_key: String,
+) -> Result<(), String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::remove_account(&app_data_dir, &entry_key)
+}
+
+#[tauri::command]
+fn grok_set_tray_account(
+    state: tauri::State<'_, Mutex<AppState>>,
+    entry_key: Option<String>,
+) -> Result<(), String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::set_tray_account(&app_data_dir, entry_key)
+}
+
+#[tauri::command]
 fn open_devtools(#[allow(unused)] app_handle: tauri::AppHandle) {
     #[cfg(debug_assertions)]
     {
@@ -589,6 +613,8 @@ pub fn run() {
             grok_start_device_login,
             grok_poll_device_login,
             grok_cancel_device_login,
+            grok_remove_account,
+            grok_set_tray_account,
             open_devtools,
             start_probe_batch,
             list_plugins,
