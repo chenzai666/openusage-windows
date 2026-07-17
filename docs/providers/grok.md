@@ -81,7 +81,10 @@ User-Agent: Grok CLI/0.2.93
 | **按量已用** / **按量付费** | 按量 |
 | **状态** | 正常 / 限制 / 需重新登录 |
 | **订阅续费** | 手动元数据解析结果 |
-| **套餐** | `tier N · SuperGrok` |
+| **层级** | JWT claim `tier`（徽章，如「层级 1」；≤1 时提示 chat 可能被 gate） |
+| **套餐** | settings `subscription_tier_display`（如 SuperGrok） |
+| **团队** | JWT `team_id` 缩写（多账号区分） |
+| **卡片标题 plan** | `层级 N · SuperGrok` |
 
 多账号时按账号分段，中间用分隔行，plan 显示 `… · k/n 账号`。
 

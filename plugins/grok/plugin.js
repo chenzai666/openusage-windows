@@ -389,6 +389,38 @@
     return payload.tier
   }
 
+  function readJwtTeamId(ctx, token) {
+    const payload = ctx.jwt.decodePayload(token)
+    if (!payload || typeof payload.team_id !== "string" || !payload.team_id.trim()) return null
+    return payload.team_id.trim()
+  }
+
+  /**
+   * xAI JWT claim `tier` — account access level (社区反馈 tier=1 易被 chat gate).
+   * Returns display badge text + color for the 层级 row.
+   */
+  function formatTierBadge(tier) {
+    if (tier === null || tier === undefined || tier === "") return null
+    const n = Number(tier)
+    const label = Number.isFinite(n) ? "层级 " + String(n) : "层级 " + String(tier)
+    // Heuristic colors — not official docs; based on community reports.
+    if (Number.isFinite(n) && n <= 1) {
+      return { text: label, color: "#f59e0b", note: "tier≤1 时对话接口常被 gate（HTTP 403）" }
+    }
+    if (Number.isFinite(n) && n >= 2) {
+      return { text: label, color: "#22c55e", note: null }
+    }
+    return { text: label, color: "#a3a3a3", note: null }
+  }
+
+  function formatPlanWithTier(planName, tier) {
+    const plan = planName && String(planName).trim() ? String(planName).trim() : null
+    const tierBadge = formatTierBadge(tier)
+    if (tierBadge && plan) return tierBadge.text + " · " + plan
+    if (tierBadge) return tierBadge.text
+    return plan || "Grok"
+  }
+
   function periodDurationMs(startIso, endIso, ctx) {
     const start = ctx.util.parseDateMs(startIso)
     const end = ctx.util.parseDateMs(endIso)
@@ -776,12 +808,13 @@
 
     if (!chatOk && chatStatus === 403) {
       const tier = readJwtTier(ctx, token)
+      const tierBadge = formatTierBadge(tier)
       lines.push(
         ctx.line.text({
           label: "Chat 说明",
           value:
             "对话被拒 HTTP 403" +
-            (tier != null ? " · JWT tier=" + String(tier) + "（社区反馈易被 gate）" : ""),
+            (tierBadge ? " · " + tierBadge.text + (tierBadge.note ? "（" + tierBadge.note + "）" : "") : ""),
           color: "#f59e0b",
         })
       )
@@ -837,24 +870,55 @@
       )
     }
 
-    // Settings plan
-    let plan = null
+    // Settings plan + JWT 层级 (tier)
+    let planName = null
     if (settingsOk) {
       const data = ctx.util.tryParseJson(settingsResp.bodyText)
       const p = data && data.subscription_tier_display
-      if (typeof p === "string" && p.trim()) plan = p.trim()
+      if (typeof p === "string" && p.trim()) planName = p.trim()
     }
     const tier = readJwtTier(ctx, token)
-    if (plan) {
-      if (tier !== null && tier !== undefined && tier !== "") {
-        plan = "tier " + String(tier) + " · " + plan
+    const tierBadge = formatTierBadge(tier)
+    const teamId = readJwtTeamId(ctx, token)
+    const plan = formatPlanWithTier(planName, tier)
+
+    // Show 层级 as its own badge (screenshot-style hierarchy), then 套餐 name.
+    if (tierBadge) {
+      lines.push(
+        ctx.line.badge({
+          label: "层级",
+          text: tierBadge.text,
+          color: tierBadge.color,
+        })
+      )
+      if (tierBadge.note) {
+        lines.push(
+          ctx.line.text({
+            label: "层级说明",
+            value: tierBadge.note,
+            color: "#a3a3a3",
+          })
+        )
       }
-    } else if (tier !== null && tier !== undefined && tier !== "") {
-      plan = "tier " + String(tier)
     }
 
-    if (plan) {
+    if (planName) {
+      lines.push(ctx.line.text({ label: "套餐", value: planName }))
+    } else if (plan) {
       lines.push(ctx.line.text({ label: "套餐", value: plan }))
+    }
+
+    if (teamId) {
+      // Short team id for multi-account discrimination (not secret, but keep compact).
+      const shortTeam =
+        teamId.length > 12 ? teamId.slice(0, 8) + "…" + teamId.slice(-4) : teamId
+      lines.push(
+        ctx.line.text({
+          label: "团队",
+          value: shortTeam,
+          color: "#a3a3a3",
+        })
+      )
     }
 
     return {
@@ -921,6 +985,8 @@
     __test: {
       parseRenewalPaste: parseRenewalPaste,
       maskEmail: maskEmail,
+      formatTierBadge: formatTierBadge,
+      formatPlanWithTier: formatPlanWithTier,
     },
   }
 })()

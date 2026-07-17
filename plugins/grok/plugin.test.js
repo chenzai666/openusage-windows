@@ -142,6 +142,39 @@ describe("grok plugin", () => {
     expect(plugin.__test.maskEmail("chenzai666@gmail.com")).toBe("che***66@gmail.com")
   })
 
+  it("formats JWT tier as 层级 badge", async () => {
+    const plugin = await loadPlugin()
+    const t1 = plugin.__test.formatTierBadge(1)
+    expect(t1.text).toBe("层级 1")
+    expect(t1.note).toContain("gate")
+    expect(plugin.__test.formatPlanWithTier("SuperGrok", 1)).toBe("层级 1 · SuperGrok")
+  })
+
+  it("shows 层级 badge when access token JWT contains tier", async () => {
+    const ctx = makeCtx()
+    // Minimal JWT: header.payload.sig — decodePayload only needs middle part
+    const payload = Buffer.from(
+      JSON.stringify({ tier: 1, exp: 9999999999, email: "t@example.com" })
+    ).toString("base64url")
+    const token = "eyJhbGciOiJub25lIn0." + payload + ".sig"
+    writeAuth(ctx, {
+      "https://auth.x.ai::client": {
+        key: token,
+        email: "tieruser@example.com",
+        expires_at: "2026-12-01T00:00:00Z",
+      },
+    })
+    mockGrokApi(ctx)
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    const tierLine = result.lines.find((l) => l.label === "层级")
+    expect(tierLine).toBeTruthy()
+    expect(tierLine.text).toBe("层级 1")
+    expect(result.plan).toContain("层级 1")
+    expect(result.plan).toContain("SuperGrok")
+  })
+
   it("sends Grok CLI aligned headers on billing requests", async () => {
     const ctx = makeCtx()
     writeAuth(ctx)
@@ -178,6 +211,9 @@ describe("grok plugin", () => {
     expect(labels).toContain("按量付费")
     expect(labels).toContain("状态")
     expect(labels).toContain("套餐")
+
+    // Plan badge on card header includes 层级 when JWT has tier (mock token has none)
+    expect(result.plan).toBeTruthy()
 
     const probe = result.lines.find((l) => l.label === "接口探测")
     expect(probe.text).toContain("成功 3")

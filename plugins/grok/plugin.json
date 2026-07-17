@@ -29,8 +29,11 @@
     { "type": "text", "label": "按量已用", "scope": "overview" },
     { "type": "badge", "label": "按量付费", "scope": "overview" },
     { "type": "badge", "label": "状态", "scope": "overview" },
+    { "type": "badge", "label": "层级", "scope": "overview" },
+    { "type": "text", "label": "层级说明", "scope": "overview" },
     { "type": "text", "label": "订阅续费", "scope": "overview" },
     { "type": "text", "label": "套餐", "scope": "overview" },
+    { "type": "text", "label": "团队", "scope": "overview" },
     { "type": "text", "label": "提示", "scope": "overview" },
     { "type": "text", "label": "——", "scope": "overview" }
   ]
