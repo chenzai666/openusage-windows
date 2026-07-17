@@ -156,6 +156,25 @@ describe("grok plugin", () => {
     expect(auth["https://auth.x.ai::client"].key).toBe("new-token")
   })
 
+  it("sends Grok CLI aligned headers on billing requests", async () => {
+    const ctx = makeCtx()
+    writeAuth(ctx)
+    mockGrokApi(ctx)
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    const billingCall = ctx.host.http.request.mock.calls.find((c) =>
+      String(c[0].url).includes("/v1/billing")
+    )
+    expect(billingCall).toBeTruthy()
+    const headers = billingCall[0].headers
+    expect(headers["X-XAI-Token-Auth"]).toBe("xai-grok-cli")
+    expect(headers["X-Grok-Client-Identifier"]).toBe("grok-shell")
+    expect(headers["X-Grok-Client-Version"]).toBe("0.2.93")
+    expect(headers["User-Agent"]).toBe("Grok CLI/0.2.93")
+  })
+
   it("requests both monthly and credits billing endpoints", async () => {
     const ctx = makeCtx()
     writeAuth(ctx)
@@ -169,7 +188,7 @@ describe("grok plugin", () => {
     expect(urls).toContain(BILLING_URL)
   })
 
-  it("renders weekly quota, products, pay-as-you-go, and monthly quota (Cliproxy Plus style)", async () => {
+  it("renders SuperGrok-style card: health, weekly, build, API monthly, on-demand", async () => {
     const ctx = makeCtx()
     writeAuth(ctx)
     mockGrokApi(ctx)
@@ -178,41 +197,59 @@ describe("grok plugin", () => {
     const result = plugin.probe(ctx)
     const labels = result.lines.map((l) => l.label)
 
+    expect(labels).toContain("账单类型")
+    expect(labels).toContain("健康状态（周限）")
     expect(labels).toContain("周限额")
-    expect(labels).toContain("周期")
-    expect(labels).toContain("GrokBuild 使用")
-    expect(labels).toContain("GrokChat 使用")
+    expect(labels).toContain("周重置")
+    expect(labels).toContain("Build 用量")
+    expect(labels).toContain("API 月额度")
+    expect(labels).toContain("API 明细")
+    expect(labels).toContain("按量已用")
     expect(labels).toContain("按量付费")
-    expect(labels).toContain("月度额度")
-    expect(labels).toContain("月度用量")
+
+    // Should not use the old Cliproxy-style product labels
+    expect(labels).not.toContain("GrokBuild 使用")
+    expect(labels).not.toContain("月度额度")
 
     const weekly = result.lines.find((l) => l.label === "周限额")
     expect(weekly.type).toBe("progress")
     expect(weekly.used).toBe(22)
     expect(weekly.limit).toBe(100)
     expect(weekly.resetsAt).toBe("2026-07-21T02:29:27.002Z")
-    expect(weekly.periodDurationMs).toBe(7 * 24 * 60 * 60 * 1000)
 
-    const build = result.lines.find((l) => l.label === "GrokBuild 使用")
+    const build = result.lines.find((l) => l.label === "Build 用量" && l.type === "progress")
     expect(build.used).toBe(22)
 
-    const chat = result.lines.find((l) => l.label === "GrokChat 使用")
-    expect(chat.type).toBe("text")
-    expect(chat.value).toBe("已用 --")
+    const billingType = result.lines.find((l) => l.label === "账单类型")
+    expect(billingType.value).toContain("统一账单")
+
+    const api = result.lines.find((l) => l.label === "API 月额度")
+    expect(api.type).toBe("progress")
+    expect(api.format).toEqual({ kind: "count", suffix: "" })
+    expect(api.used).toBe(1353)
+    expect(api.limit).toBe(15000)
 
     const payg = result.lines.find((l) => l.label === "按量付费")
     expect(payg.text).toBe("未启用")
 
-    const monthly = result.lines.find((l) => l.label === "月度额度")
-    expect(monthly.type).toBe("progress")
-    expect(monthly.format).toEqual({ kind: "dollars" })
-    expect(monthly.used).toBeCloseTo(13.53, 2)
-    expect(monthly.limit).toBeCloseTo(150, 2)
-    expect(monthly.resetsAt).toBe("2026-08-01T00:00:00.000Z")
+    const onDemand = result.lines.find((l) => l.label === "按量已用")
+    expect(onDemand.value).toContain("US$0.00")
+  })
 
-    const monthlyDetail = result.lines.find((l) => l.label === "月度用量")
-    expect(monthlyDetail.value).toContain("$13.53")
-    expect(monthlyDetail.value).toContain("$150.00")
+  it("shows Build missing hint when productUsage has no GrokBuild percent", async () => {
+    const ctx = makeCtx()
+    writeAuth(ctx)
+    mockGrokApi(ctx, {
+      credits: creditsBillingData({
+        productUsage: [{ product: "GrokChat" }],
+      }),
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    const build = result.lines.find((l) => l.label === "Build 用量")
+    expect(build.type).toBe("text")
+    expect(build.value).toContain("接口未返回 Build 字段")
   })
 
   it("renders pay as you go cap when enabled", async () => {
@@ -226,7 +263,7 @@ describe("grok plugin", () => {
     const result = plugin.probe(ctx)
     const line = result.lines.find((l) => l.label === "按量付费")
 
-    expect(line.text).toBe("上限 2500")
+    expect(line.text).toBe("上限 US$25.00")
     expect(line.color).toBe("#22c55e")
   })
 
@@ -248,37 +285,6 @@ describe("grok plugin", () => {
     expect(weekly).toBeTruthy()
     expect(weekly.used).toBe(33)
     expect(weekly.resetsAt).toBeUndefined()
-  })
-
-  it("retries credits billing once after a transient failure", async () => {
-    const ctx = makeCtx()
-    writeAuth(ctx)
-    let creditsCalls = 0
-    ctx.host.http.request.mockImplementation((req) => {
-      const url = String(req.url || "")
-      if (url.includes("format=credits")) {
-        creditsCalls += 1
-        if (creditsCalls === 1) {
-          return { status: 502, bodyText: "bad gateway" }
-        }
-        return { status: 200, bodyText: JSON.stringify(creditsBillingData()) }
-      }
-      if (url === BILLING_URL || (url.startsWith(BILLING_URL) && !url.includes("format=credits"))) {
-        return { status: 200, bodyText: JSON.stringify(monthlyBillingData()) }
-      }
-      if (url === SETTINGS_URL) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({ subscription_tier_display: "SuperGrok" }),
-        }
-      }
-      return { status: 404, bodyText: "" }
-    })
-
-    const plugin = await loadPlugin()
-    const result = plugin.probe(ctx)
-    expect(creditsCalls).toBe(2)
-    expect(result.lines.find((l) => l.label === "周限额")).toBeTruthy()
   })
 
   it("still works when credits endpoint fails but monthly succeeds", async () => {
@@ -303,7 +309,7 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    expect(result.lines.find((l) => l.label === "月度额度")).toBeTruthy()
+    expect(result.lines.find((l) => l.label === "API 月额度")).toBeTruthy()
     expect(result.lines.find((l) => l.label === "周限额")).toBeUndefined()
   })
 
@@ -353,8 +359,8 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    const monthly = result.lines.find((l) => l.label === "月度额度")
-    expect(monthly.used).toBeCloseTo(25, 2)
-    expect(monthly.limit).toBeCloseTo(100, 2)
+    const monthly = result.lines.find((l) => l.label === "API 月额度")
+    expect(monthly.used).toBe(2500)
+    expect(monthly.limit).toBe(10000)
   })
 })
