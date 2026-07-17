@@ -276,6 +276,36 @@ fn grok_set_tray_account(
 }
 
 #[tauri::command]
+fn grok_reorder_accounts(
+    state: tauri::State<'_, Mutex<AppState>>,
+    ordered_keys: Vec<String>,
+) -> Result<(), String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::reorder_accounts(&app_data_dir, ordered_keys)
+}
+
+#[tauri::command]
+fn grok_logout_all(state: tauri::State<'_, Mutex<AppState>>) -> Result<u32, String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::logout_all(&app_data_dir)
+}
+
+#[tauri::command]
+fn grok_soft_import_cli(state: tauri::State<'_, Mutex<AppState>>) -> Result<u32, String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::soft_import_cli(&app_data_dir)
+}
+
+#[tauri::command]
 fn open_devtools(#[allow(unused)] app_handle: tauri::AppHandle) {
     #[cfg(debug_assertions)]
     {
@@ -615,6 +645,9 @@ pub fn run() {
             grok_cancel_device_login,
             grok_remove_account,
             grok_set_tray_account,
+            grok_reorder_accounts,
+            grok_logout_all,
+            grok_soft_import_cli,
             open_devtools,
             start_probe_batch,
             list_plugins,

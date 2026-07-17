@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react"
 import { invoke, isTauri } from "@tauri-apps/api/core"
-import { FlaskConical, RefreshCw, Settings, Trash2 } from "lucide-react"
+import {
+  FlaskConical,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Settings,
+  Trash2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { MetricLine } from "@/lib/plugin-types"
@@ -137,6 +144,19 @@ type GrokCardsViewProps = {
   onRetry?: () => void
   onOpenSettings?: () => void
   compact?: boolean
+  /** Last successful probe time (ms). */
+  lastUpdatedAt?: number | null
+  /** Next auto-refresh time (ms). */
+  autoUpdateNextAt?: number | null
+  workbench?: boolean
+  onToggleWorkbench?: () => void
+}
+
+function formatClock(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return "—"
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function GrokCardsView({
@@ -144,9 +164,14 @@ export function GrokCardsView({
   onRetry,
   onOpenSettings,
   compact = false,
+  lastUpdatedAt = null,
+  autoUpdateNextAt = null,
+  workbench = false,
+  onToggleWorkbench,
 }: GrokCardsViewProps) {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [testingAll, setTestingAll] = useState(false)
   const accounts = payload.accounts
 
   const trayKey = useMemo(() => {
@@ -186,6 +211,17 @@ export function GrokCardsView({
     }
   }
 
+  const testAll = async () => {
+    setTestingAll(true)
+    setError(null)
+    try {
+      // Full probe re-runs billing/settings/chat for every account.
+      onRetry?.()
+    } finally {
+      window.setTimeout(() => setTestingAll(false), 800)
+    }
+  }
+
   if (accounts.length === 0) {
     return (
       <div className="text-sm text-muted-foreground py-4 text-center">
@@ -194,15 +230,84 @@ export function GrokCardsView({
     )
   }
 
+  const okCount = accounts.filter((a) => a.status === "正常").length
+  const warnCount = accounts.length - okCount
+
   return (
     <div className={cn("space-y-3", compact && "space-y-2")}>
+      {/* Workbench toolbar — design doc 7.4 */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-2 py-1.5">
+        <div className="min-w-0 flex-1 text-[11px] text-muted-foreground leading-snug">
+          <span className="font-medium text-foreground">
+            {accounts.length} 账号
+          </span>
+          <span className="mx-1.5 opacity-40">·</span>
+          正常 {okCount} / 异常 {warnCount}
+          <span className="mx-1.5 opacity-40">·</span>
+          上次 {formatClock(lastUpdatedAt)}
+          <span className="mx-1.5 opacity-40">·</span>
+          下次 {formatClock(autoUpdateNextAt)}
+        </div>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="h-7 text-[11px] gap-1"
+          disabled={testingAll}
+          onClick={() => void testAll()}
+          title="串行刷新全部账号（含 billing/settings/chat）"
+        >
+          <FlaskConical className="size-3.5" />
+          {testingAll ? "测试中…" : "一键测试全部"}
+        </Button>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="h-7 text-[11px] gap-1"
+          onClick={() => onRetry?.()}
+        >
+          <RefreshCw className="size-3.5" />
+          刷新
+        </Button>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="h-7 text-[11px] gap-1"
+          onClick={() => onOpenSettings?.()}
+        >
+          <Settings className="size-3.5" />
+          设置
+        </Button>
+        {onToggleWorkbench && (
+          <Button
+            type="button"
+            size="xs"
+            variant={workbench ? "default" : "outline"}
+            className="h-7 text-[11px] gap-1"
+            onClick={onToggleWorkbench}
+            title={workbench ? "退出全屏工作台" : "全屏工作台"}
+          >
+            {workbench ? (
+              <Minimize2 className="size-3.5" />
+            ) : (
+              <Maximize2 className="size-3.5" />
+            )}
+            {workbench ? "退出全屏" : "全屏"}
+          </Button>
+        )}
+      </div>
+
       {error && (
         <p className="text-xs text-destructive break-words">{error}</p>
       )}
       <div
         className={cn(
           "grid gap-3",
-          accounts.length > 1 ? "grid-cols-1" : "grid-cols-1"
+          workbench
+            ? "grid-cols-1 sm:grid-cols-2"
+            : "grid-cols-1"
         )}
       >
         {accounts.map((acc) => {

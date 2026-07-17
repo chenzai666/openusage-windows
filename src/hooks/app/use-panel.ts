@@ -9,10 +9,14 @@ import {
 } from "@tauri-apps/api/window"
 import type { ActiveView } from "@/components/side-nav"
 import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
+import { useAppUiStore } from "@/stores/app-ui-store"
 
 const PANEL_WIDTH = 400
+/** Wider panel for Grok multi-column workbench. */
+const WORKBENCH_PANEL_WIDTH = 760
 const MAX_HEIGHT_FALLBACK_PX = 600
 const MAX_HEIGHT_FRACTION_OF_MONITOR = 0.8
+const WORKBENCH_MAX_HEIGHT_FRACTION = 0.92
 /** Ignore sub-pixel / DPI jitter so we don't fight the window manager. */
 const SIZE_EPSILON_PX = 2
 /** Coalesce rapid layout thrash when switching providers / probe results paint. */
@@ -53,6 +57,7 @@ export function usePanel({
   const bottomEdgePhysRef = useRef<number | null>(null)
   /** Latest scheduled resize entry point (set by the resize effect). */
   const scheduleResizeRef = useRef<(() => void) | null>(null)
+  const grokWorkbench = useAppUiStore((s) => s.grokWorkbench)
   const focusContainer = useCallback(() => {
     window.requestAnimationFrame(() => {
       containerRef.current?.focus({ preventScroll: true })
@@ -86,6 +91,11 @@ export function usePanel({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Esc exits Grok workbench first; second Esc hides panel.
+        if (useAppUiStore.getState().grokWorkbench) {
+          useAppUiStore.getState().setGrokWorkbench(false)
+          return
+        }
         invoke("hide_panel")
       }
     }
@@ -208,19 +218,32 @@ export function usePanel({
       if (cancelled || !containerRef.current) return
       const el = containerRef.current
       const factor = window.devicePixelRatio || 1
-      const width = Math.ceil(PANEL_WIDTH * factor)
+      const workbench = useAppUiStore.getState().grokWorkbench
+      const logicalWidth = workbench ? WORKBENCH_PANEL_WIDTH : PANEL_WIDTH
+      const width = Math.ceil(logicalWidth * factor)
       const desiredHeightLogical = Math.max(1, el.scrollHeight)
 
       const maxH = await measureMaxHeight()
       if (cancelled) return
 
-      if (maxPanelHeightPxRef.current !== maxH.logical) {
-        maxPanelHeightPxRef.current = maxH.logical
-        setMaxPanelHeightPx(maxH.logical)
+      // Workbench uses more of the monitor height (near full work area).
+      const heightCapLogical = workbench
+        ? Math.floor(
+            (Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX) *
+              WORKBENCH_MAX_HEIGHT_FRACTION
+          )
+        : maxH.logical
+      const heightCapPhysical = workbench
+        ? Math.floor(heightCapLogical * factor)
+        : maxH.physical
+
+      if (maxPanelHeightPxRef.current !== heightCapLogical) {
+        maxPanelHeightPxRef.current = heightCapLogical
+        setMaxPanelHeightPx(heightCapLogical)
       }
 
       const desiredHeightPhysical = Math.ceil(desiredHeightLogical * factor)
-      const height = Math.ceil(Math.min(desiredHeightPhysical, maxH.physical))
+      const height = Math.ceil(Math.min(desiredHeightPhysical, heightCapPhysical))
 
       try {
         const currentWindow = getCurrentWindow()
@@ -314,26 +337,31 @@ export function usePanel({
       if (debounceTimer !== null) clearTimeout(debounceTimer)
       observer.disconnect()
     }
-    // Intentionally empty deps: ResizeObserver covers content height changes.
-    // Re-binding on activeView/displayPlugins was re-snapping the window on every
-    // probe paint and looked like "乱飞" when clicking other AI providers.
-  }, [])
+    // Re-run when workbench toggles so width/height caps update.
+  }, [grokWorkbench])
 
-  // After switching provider/settings, wait for React layout then resize once.
+  // After switching provider/settings/workbench, wait for React layout then resize once.
   useEffect(() => {
     if (!isTauri()) return
+    // Reset bottom lock when entering/leaving workbench so reanchor stays sane.
+    if (grokWorkbench) {
+      bottomEdgePhysRef.current = null
+    }
     let raf1 = 0
     let raf2 = 0
     raf1 = window.requestAnimationFrame(() => {
       raf2 = window.requestAnimationFrame(() => {
         scheduleResizeRef.current?.()
+        if (grokWorkbench) {
+          void invoke("reanchor_panel").catch(() => {})
+        }
       })
     })
     return () => {
       window.cancelAnimationFrame(raf1)
       window.cancelAnimationFrame(raf2)
     }
-  }, [activeView])
+  }, [activeView, grokWorkbench])
 
   useEffect(() => {
     const el = scrollRef.current

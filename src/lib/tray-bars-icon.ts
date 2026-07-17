@@ -179,7 +179,7 @@ function getSvgLayout(args: {
 export function makeTrayBarsSvg(args: {
   bars: TrayPrimaryBar[]
   sizePx: number
-  style?: MenubarIconStyle
+  style?: MenubarIconStyle | "percent"
   percentText?: string
   providerIconUrl?: string
 }): string {
@@ -189,9 +189,23 @@ export function makeTrayBarsSvg(args: {
   // so the tray icon keeps a stable shape during loading/initialization.
   const n = Math.max(1, Math.min(4, barsForStyle.length || 1))
   const text = normalizePercentText(percentText)
+
+  // Pure digits icon (Grok weekly design doc): black number on transparent.
+  if (style === "percent") {
+    const digits = (text || "--%").replace(/%/g, "")
+    const w = Math.max(sizePx, Math.round(sizePx * 1.35))
+    const h = sizePx
+    const fontSize = Math.max(10, Math.round(sizePx * 0.72))
+    return [
+      `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`,
+      `<text x="${w / 2}" y="${Math.round(h / 2) + 1}" text-anchor="middle" dominant-baseline="middle" font-family="ui-sans-serif,system-ui,Segoe UI,sans-serif" font-size="${fontSize}" font-weight="700" fill="black">${escapeXmlText(digits)}</text>`,
+      `</svg>`,
+    ].join("")
+  }
+
   const layout = getSvgLayout({
     sizePx,
-    style,
+    style: style as MenubarIconStyle,
     percentText: text,
   })
 
@@ -377,7 +391,7 @@ async function rasterizeSvgToRgba(svg: string, widthPx: number, heightPx: number
 export async function renderTrayBarsIcon(args: {
   bars: TrayPrimaryBar[]
   sizePx: number
-  style?: MenubarIconStyle
+  style?: MenubarIconStyle | "percent"
   percentText?: string
   providerIconUrl?: string
 }): Promise<Image> {
@@ -390,9 +404,14 @@ export async function renderTrayBarsIcon(args: {
     percentText: text,
     providerIconUrl,
   })
+  if (style === "percent") {
+    const w = Math.max(sizePx, Math.round(sizePx * 1.35))
+    const rgba = await rasterizeSvgToRgba(svg, w, sizePx)
+    return await Image.new(rgba, w, sizePx)
+  }
   const layout = getSvgLayout({
     sizePx,
-    style,
+    style: style as MenubarIconStyle,
     percentText: text,
   })
   const rgba = await rasterizeSvgToRgba(svg, layout.width, layout.height)

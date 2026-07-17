@@ -306,17 +306,26 @@ export function useTrayIcon({
         return
       }
 
+      // Design doc: pure weekly percent digits for Grok (black/white number).
+      const preferGrokPercentIcon =
+        preferWeekly &&
+        trayProviderId === "grok" &&
+        providerBars[0] &&
+        Number.isFinite(providerBars[0].fraction)
+
       renderTrayBarsIcon({
         bars: providerBars,
         sizePx,
-        style: "provider",
-        percentText: supportsNativeTrayTitle ? undefined : providerPercentText,
-        providerIconUrl,
+        style: preferGrokPercentIcon ? "percent" : "provider",
+        percentText: supportsNativeTrayTitle && !preferGrokPercentIcon
+          ? undefined
+          : providerPercentText,
+        providerIconUrl: preferGrokPercentIcon ? undefined : providerIconUrl,
       })
         .then(async (img) => {
           await tray.setIcon(img)
           await tray.setIconAsTemplate(true)
-          await setTrayTitle(providerPercentText)
+          await setTrayTitle(preferGrokPercentIcon ? "" : providerPercentText)
           await updateTooltip()
         })
         .catch((e) => {

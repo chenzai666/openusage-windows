@@ -297,8 +297,91 @@ pub fn list_accounts(app_data_dir: &Path) -> Result<Vec<GrokAccountSummary>, Str
         });
     }
 
-    out.sort_by(|a, b| a.email_masked.cmp(&b.email_masked));
+    // Prefer explicit accountOrder from meta; fall back to email sort.
+    let order: Vec<String> = meta
+        .get("accountOrder")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !order.is_empty() {
+        out.sort_by(|a, b| {
+            let ia = order.iter().position(|k| k == &a.entry_key).unwrap_or(usize::MAX);
+            let ib = order.iter().position(|k| k == &b.entry_key).unwrap_or(usize::MAX);
+            ia.cmp(&ib).then_with(|| a.email_masked.cmp(&b.email_masked))
+        });
+    } else {
+        out.sort_by(|a, b| a.email_masked.cmp(&b.email_masked));
+    }
     Ok(out)
+}
+
+/// Persist display order of account entry keys.
+pub fn reorder_accounts(app_data_dir: &Path, ordered_keys: Vec<String>) -> Result<(), String> {
+    let path = meta_path(app_data_dir);
+    let mut meta = read_json_file(&path).unwrap_or_else(|| json!({ "entries": {} }));
+    if !meta.is_object() {
+        meta = json!({ "entries": {} });
+    }
+    let cleaned: Vec<String> = ordered_keys
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    meta.as_object_mut()
+        .unwrap()
+        .insert("accountOrder".into(), json!(cleaned));
+    write_json_file(&path, &meta)
+}
+
+/// Remove all Grok accounts from `~/.grok/auth.json` and clear meta entries.
+/// Does not delete the auth file itself (keeps empty object).
+pub fn logout_all(app_data_dir: &Path) -> Result<u32, String> {
+    let path = auth_json_path().ok_or_else(|| "无法解析用户目录".to_string())?;
+    let auth = read_json_file(&path).unwrap_or_else(|| json!({}));
+    let count = auth.as_object().map(|o| o.len() as u32).unwrap_or(0);
+    write_json_file(&path, &json!({}))?;
+
+    let meta_p = meta_path(app_data_dir);
+    let mut meta = read_json_file(&meta_p).unwrap_or_else(|| json!({ "entries": {} }));
+    if let Some(obj) = meta.as_object_mut() {
+        obj.insert("entries".into(), json!({}));
+        obj.remove("trayEntryKey");
+        obj.remove("accountOrder");
+    }
+    let _ = write_json_file(&meta_p, &meta);
+    Ok(count)
+}
+
+/// Soft-import: copy CLI auth entries into OpenUsage meta order without wiping CLI file.
+/// Returns number of accounts discovered.
+pub fn soft_import_cli(app_data_dir: &Path) -> Result<u32, String> {
+    let list = list_accounts(app_data_dir)?;
+    let path = meta_path(app_data_dir);
+    let mut meta = read_json_file(&path).unwrap_or_else(|| json!({ "entries": {} }));
+    if !meta.is_object() {
+        meta = json!({ "entries": {} });
+    }
+    let obj = meta.as_object_mut().unwrap();
+    if !obj.contains_key("entries") {
+        obj.insert("entries".into(), json!({}));
+    }
+    // Ensure every CLI account has a meta slot; never shrink existing labels.
+    let entries = obj.get_mut("entries").and_then(|v| v.as_object_mut()).unwrap();
+    for acc in &list {
+        if !entries.contains_key(&acc.entry_key) {
+            entries.insert(acc.entry_key.clone(), json!({ "labels": [] }));
+        }
+    }
+    if !obj.contains_key("accountOrder") || obj.get("accountOrder").and_then(|v| v.as_array()).map(|a| a.is_empty()).unwrap_or(true) {
+        let keys: Vec<String> = list.iter().map(|a| a.entry_key.clone()).collect();
+        obj.insert("accountOrder".into(), json!(keys));
+    }
+    write_json_file(&path, &meta)?;
+    Ok(list.len() as u32)
 }
 
 #[derive(Debug, Deserialize)]

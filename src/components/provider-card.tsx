@@ -33,6 +33,9 @@ interface ProviderCardProps {
   onRetry?: () => void
   /** Open Grok account settings (design footer gear). */
   onOpenGrokSettings?: () => void
+  autoUpdateNextAt?: number | null
+  grokWorkbench?: boolean
+  onToggleGrokWorkbench?: () => void
   scopeFilter?: "overview" | "all"
   displayMode: DisplayMode
   resetTimerDisplayMode?: ResetTimerDisplayMode
@@ -109,6 +112,9 @@ export function ProviderCard({
   lastUpdatedAt,
   onRetry,
   onOpenGrokSettings,
+  autoUpdateNextAt = null,
+  grokWorkbench = false,
+  onToggleGrokWorkbench,
   scopeFilter = "all",
   displayMode,
   resetTimerDisplayMode = "relative",
@@ -316,6 +322,10 @@ export function ProviderCard({
             onRetry={onRetry}
             onOpenSettings={onOpenGrokSettings}
             compact={scopeFilter === "overview"}
+            lastUpdatedAt={lastUpdatedAt}
+            autoUpdateNextAt={autoUpdateNextAt}
+            workbench={grokWorkbench}
+            onToggleWorkbench={onToggleGrokWorkbench}
           />
         )}
 

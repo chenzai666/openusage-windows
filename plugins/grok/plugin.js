@@ -1058,9 +1058,22 @@
     }
   }
 
+  function orderAccounts(accounts, meta) {
+    const order = Array.isArray(meta.accountOrder) ? meta.accountOrder : []
+    if (!order.length) return accounts
+    const rank = {}
+    for (let i = 0; i < order.length; i++) rank[String(order[i])] = i
+    return accounts.slice().sort(function (a, b) {
+      const ia = rank[a.entryKey] !== undefined ? rank[a.entryKey] : 9999
+      const ib = rank[b.entryKey] !== undefined ? rank[b.entryKey] : 9999
+      return ia - ib
+    })
+  }
+
   function probe(ctx) {
-    const accounts = loadAllAccounts(ctx)
+    let accounts = loadAllAccounts(ctx)
     const meta = loadMeta(ctx)
+    accounts = orderAccounts(accounts, meta)
     // Persist skeleton meta file so users can edit labels / subscription paste.
     if (!ctx.host.fs.exists(metaPath(ctx))) {
       const seed = {

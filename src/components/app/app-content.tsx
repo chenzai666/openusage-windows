@@ -40,6 +40,7 @@ export type AppContentActionProps = {
   onGlobalShortcutChange: (value: GlobalShortcut) => void
   onStartOnLoginChange: (value: boolean) => void
   onGrokAccountsChanged?: () => void
+  autoUpdateNextAt?: number | null
 }
 
 export type AppContentProps = AppContentDerivedProps & AppContentActionProps
@@ -63,10 +64,13 @@ export function AppContent({
   onGlobalShortcutChange,
   onStartOnLoginChange,
   onGrokAccountsChanged,
+  autoUpdateNextAt = null,
 }: AppContentProps) {
-  const { activeView } = useAppUiStore(
+  const { activeView, grokWorkbench, toggleGrokWorkbench } = useAppUiStore(
     useShallow((state) => ({
       activeView: state.activeView,
+      grokWorkbench: state.grokWorkbench,
+      toggleGrokWorkbench: state.toggleGrokWorkbench,
     }))
   )
 
@@ -103,6 +107,9 @@ export function AppContent({
           // Jump to settings where Grok account editor lives
           useAppUiStore.getState().setActiveView("settings")
         }}
+        autoUpdateNextAt={autoUpdateNextAt}
+        grokWorkbench={grokWorkbench}
+        onToggleGrokWorkbench={toggleGrokWorkbench}
         displayMode={displayMode}
         resetTimerDisplayMode={resetTimerDisplayMode}
         timeFormatMode={timeFormatMode}

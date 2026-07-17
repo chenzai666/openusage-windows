@@ -7,6 +7,9 @@ interface OverviewPageProps {
   plugins: PluginDisplayState[]
   onRetryPlugin?: (pluginId: string) => void
   onOpenGrokSettings?: () => void
+  autoUpdateNextAt?: number | null
+  grokWorkbench?: boolean
+  onToggleGrokWorkbench?: () => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
@@ -17,6 +20,9 @@ export function OverviewPage({
   plugins,
   onRetryPlugin,
   onOpenGrokSettings,
+  autoUpdateNextAt = null,
+  grokWorkbench = false,
+  onToggleGrokWorkbench,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode = "auto",
@@ -45,6 +51,13 @@ export function OverviewPage({
             onRetry={onRetryPlugin ? () => onRetryPlugin(plugin.meta.id) : undefined}
             onOpenGrokSettings={
               plugin.meta.id === "grok" ? onOpenGrokSettings : undefined
+            }
+            autoUpdateNextAt={
+              plugin.meta.id === "grok" ? autoUpdateNextAt : null
+            }
+            grokWorkbench={plugin.meta.id === "grok" ? grokWorkbench : false}
+            onToggleGrokWorkbench={
+              plugin.meta.id === "grok" ? onToggleGrokWorkbench : undefined
             }
             scopeFilter="overview"
             displayMode={displayMode}

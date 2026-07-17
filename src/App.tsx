@@ -264,6 +264,7 @@ function App() {
         onGlobalShortcutChange: handleGlobalShortcutChange,
         onStartOnLoginChange: handleStartOnLoginChange,
         onGrokAccountsChanged: () => handleRetryPlugin("grok"),
+        autoUpdateNextAt,
       }}
     />
   )
