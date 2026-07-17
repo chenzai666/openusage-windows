@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "grok",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "name": "Grok",
   "entry": "plugin.js",
   "icon": "icon.svg",
@@ -10,6 +10,13 @@
     { "label": "Usage", "url": "https://grok.com/?_s=usage" }
   ],
   "lines": [
+    { "type": "text", "label": "账号", "scope": "overview" },
+    { "type": "text", "label": "账号 1/1", "scope": "overview" },
+    { "type": "text", "label": "账号 1/2", "scope": "overview" },
+    { "type": "text", "label": "账号 2/2", "scope": "overview" },
+    { "type": "badge", "label": "接口探测", "scope": "overview" },
+    { "type": "text", "label": "探测明细", "scope": "overview" },
+    { "type": "text", "label": "Chat 说明", "scope": "overview" },
     { "type": "text", "label": "账单类型", "scope": "overview" },
     { "type": "progress", "label": "健康状态（周限）", "scope": "overview" },
     { "type": "progress", "label": "周限额", "scope": "overview", "primaryOrder": 1, "period": "weekly" },
@@ -20,6 +27,11 @@
     { "type": "progress", "label": "API 月额度", "scope": "overview", "primaryOrder": 2 },
     { "type": "text", "label": "API 明细", "scope": "overview" },
     { "type": "text", "label": "按量已用", "scope": "overview" },
-    { "type": "badge", "label": "按量付费", "scope": "overview" }
+    { "type": "badge", "label": "按量付费", "scope": "overview" },
+    { "type": "badge", "label": "状态", "scope": "overview" },
+    { "type": "text", "label": "订阅续费", "scope": "overview" },
+    { "type": "text", "label": "套餐", "scope": "overview" },
+    { "type": "text", "label": "提示", "scope": "overview" },
+    { "type": "text", "label": "——", "scope": "overview" }
   ]
 }
