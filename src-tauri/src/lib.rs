@@ -1,6 +1,7 @@
 #[cfg(target_os = "macos")]
 mod app_nap;
 mod config;
+mod grok_accounts;
 mod local_http_api;
 mod log_path;
 mod panel;
@@ -210,6 +211,44 @@ fn hide_panel(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn reanchor_panel(app_handle: tauri::AppHandle) {
     panel::reanchor_panel(&app_handle);
+}
+
+#[tauri::command]
+fn grok_list_accounts(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<Vec<grok_accounts::GrokAccountSummary>, String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::list_accounts(&app_data_dir)
+}
+
+#[tauri::command]
+fn grok_update_account_meta(
+    state: tauri::State<'_, Mutex<AppState>>,
+    update: grok_accounts::GrokAccountMetaUpdate,
+) -> Result<grok_accounts::GrokAccountSummary, String> {
+    let app_data_dir = {
+        let locked = state.lock().map_err(|_| "state lock poisoned".to_string())?;
+        locked.app_data_dir.clone()
+    };
+    grok_accounts::update_account_meta(&app_data_dir, update)
+}
+
+#[tauri::command]
+fn grok_start_device_login() -> Result<grok_accounts::GrokDeviceLoginStart, String> {
+    grok_accounts::start_device_login()
+}
+
+#[tauri::command]
+fn grok_poll_device_login() -> Result<grok_accounts::GrokDeviceLoginStatus, String> {
+    grok_accounts::poll_device_login()
+}
+
+#[tauri::command]
+fn grok_cancel_device_login() {
+    grok_accounts::cancel_device_login();
 }
 
 #[tauri::command]
@@ -545,6 +584,11 @@ pub fn run() {
             init_panel,
             hide_panel,
             reanchor_panel,
+            grok_list_accounts,
+            grok_update_account_meta,
+            grok_start_device_login,
+            grok_poll_device_login,
+            grok_cancel_device_login,
             open_devtools,
             start_probe_batch,
             list_plugins,

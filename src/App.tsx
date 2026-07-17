@@ -263,6 +263,7 @@ function App() {
         traySettingsPreview,
         onGlobalShortcutChange: handleGlobalShortcutChange,
         onStartOnLoginChange: handleStartOnLoginChange,
+        onGrokAccountsChanged: () => handleRetryPlugin("grok"),
       }}
     />
   )

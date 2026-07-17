@@ -39,6 +39,7 @@ export type AppContentActionProps = {
   traySettingsPreview: TraySettingsPreview
   onGlobalShortcutChange: (value: GlobalShortcut) => void
   onStartOnLoginChange: (value: boolean) => void
+  onGrokAccountsChanged?: () => void
 }
 
 export type AppContentProps = AppContentDerivedProps & AppContentActionProps
@@ -61,6 +62,7 @@ export function AppContent({
   traySettingsPreview,
   onGlobalShortcutChange,
   onStartOnLoginChange,
+  onGrokAccountsChanged,
 }: AppContentProps) {
   const { activeView } = useAppUiStore(
     useShallow((state) => ({
@@ -130,6 +132,7 @@ export function AppContent({
         onGlobalShortcutChange={onGlobalShortcutChange}
         startOnLogin={startOnLogin}
         onStartOnLoginChange={onStartOnLoginChange}
+        onGrokAccountsChanged={onGrokAccountsChanged}
       />
     )
   }

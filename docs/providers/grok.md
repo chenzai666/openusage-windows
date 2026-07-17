@@ -18,28 +18,14 @@
 
 ## 设置
 
-1. 安装并登录 Grok CLI（可多次登录多账号，写入同一 `auth.json`）：
-
-```bash
-grok login
-```
-
-2. 在 OpenUsage 设置中启用 Grok 插件。
-
-3. （可选）编辑 `accounts-meta.json`：
-
-```json
-{
-  "entries": {
-    "https://auth.x.ai::<clientId>": {
-      "labels": ["周02"],
-      "subscription_paste": "Renews on July 18, 2026 · billed via Google Play"
-    }
-  }
-}
-```
-
-粘贴文案会解析为 **`18/07/2026 · Google Play`**。
+1. 在 OpenUsage **设置 → 提供商插件** 中启用 Grok。
+2. 同一页底部 **Grok 账号** 区块：
+   - **添加 / 重新登录**：device-code 流程，**复制链接到剪贴板**（不自动打开浏览器），在浏览器完成授权后写入 `~/.grok/auth.json`
+   - 也可继续用 CLI：`grok login`
+   - 为每个账号编辑 **标签**、**订阅续费粘贴**（如 `Renews on July 18, 2026 · billed via Google Play` → `18/07/2026 · Google Play`）
+3. 元数据仍保存在  
+   `%APPDATA%\com.openusage.windows\plugins_data\grok\accounts-meta.json`  
+   （设置页保存会自动写此文件）
 
 ## 请求头
 

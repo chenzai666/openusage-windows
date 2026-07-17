@@ -40,6 +40,7 @@ import {
 import { getTimeFormatter } from "@/lib/reset-tooltip";
 import type { TraySettingsPreview } from "@/hooks/app/use-tray-icon";
 import { cn } from "@/lib/utils";
+import { GrokAccountsSection } from "@/components/grok-accounts-section";
 
 interface PluginConfig {
   id: string;
@@ -284,6 +285,8 @@ interface SettingsPageProps {
   onGlobalShortcutChange: (value: GlobalShortcut) => void;
   startOnLogin: boolean;
   onStartOnLoginChange: (value: boolean) => void;
+  /** Re-probe Grok after account meta / login changes. */
+  onGrokAccountsChanged?: () => void;
 }
 
 export function SettingsPage({
@@ -309,6 +312,7 @@ export function SettingsPage({
   onGlobalShortcutChange,
   startOnLogin,
   onStartOnLoginChange,
+  onGrokAccountsChanged,
 }: SettingsPageProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -589,6 +593,10 @@ export function SettingsPage({
           </DndContext>
         </div>
       </section>
+
+      {plugins.some((p) => p.id === "grok" && p.enabled) && (
+        <GrokAccountsSection onAccountsChanged={onGrokAccountsChanged} />
+      )}
     </div>
   );
 }
