@@ -419,7 +419,8 @@ describe("App", () => {
     await waitFor(() => expect(state.savePluginSettingsMock).toHaveBeenCalled())
     await waitFor(() => expect(state.migrateLegacyTraySettingsMock).toHaveBeenCalled())
     expect(screen.getByText("Alpha")).toBeInTheDocument()
-    expect(state.setSizeMock).toHaveBeenCalled()
+    // Panel resize is debounced (~48ms); wait rather than assert immediately.
+    await waitFor(() => expect(state.setSizeMock).toHaveBeenCalled(), { timeout: 2000 })
   })
 
   it("calls migrateLegacyTraySettings before loadMenubarIconStyle during bootstrap", async () => {
