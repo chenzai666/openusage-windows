@@ -145,9 +145,9 @@ describe("grok plugin", () => {
   it("formats JWT tier as 层级 badge", async () => {
     const plugin = await loadPlugin()
     const t1 = plugin.__test.formatTierBadge(1)
-    expect(t1.text).toBe("层级 1")
-    expect(t1.note).toContain("gate")
-    expect(plugin.__test.formatPlanWithTier("SuperGrok", 1)).toBe("层级 1 · SuperGrok")
+    expect(t1.text).toBe("tier 1")
+    expect(t1.note).toMatch(/tier|gate|权限/i)
+    expect(plugin.__test.formatPlanWithTier("SuperGrok", 1)).toBe("tier 1 · SuperGrok")
   })
 
   it("shows 层级 in plan and card when access token JWT contains tier", async () => {
@@ -168,12 +168,12 @@ describe("grok plugin", () => {
 
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
-    expect(result.plan).toContain("层级 1")
+    expect(result.plan).toContain("tier 1")
     expect(result.plan).toContain("SuperGrok")
     const raw = result.lines.find((l) => l.label === "__grok_v1")
     const data = JSON.parse(raw.value)
     expect(data.accounts[0].tier).toBe(1)
-    expect(data.accounts[0].planLine).toContain("层级 1")
+    expect(data.accounts[0].planLine).toContain("tier 1")
   })
 
   it("sends Grok CLI aligned headers on billing requests", async () => {

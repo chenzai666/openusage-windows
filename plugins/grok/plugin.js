@@ -402,10 +402,14 @@
   function formatTierBadge(tier) {
     if (tier === null || tier === undefined || tier === "") return null
     const n = Number(tier)
-    const label = Number.isFinite(n) ? "层级 " + String(n) : "层级 " + String(tier)
-    // Heuristic colors — not official docs; based on community reports.
+    // Reference UI uses English "tier N"
+    const label = Number.isFinite(n) ? "tier " + String(n) : "tier " + String(tier)
     if (Number.isFinite(n) && n <= 1) {
-      return { text: label, color: "#f59e0b", note: "tier≤1 时对话接口常被 gate（HTTP 403）" }
+      return {
+        text: label,
+        color: "#f59e0b",
+        note: "JWT tier=1 不一定是未登录；常见于权限/统一账单或客户端漏头校验，可尝试重新登录",
+      }
     }
     if (Number.isFinite(n) && n >= 2) {
       return { text: label, color: "#22c55e", note: null }
@@ -931,8 +935,8 @@
 
     if (isUnified) {
       card.unifiedNote = hasWeeklyPercent
-        ? "统一账单账号：周限百分比已返回；已显示 Build/API/月额度（若接口有）"
-        : "统一账单账号：周限百分比未返回；已显示 Build/API/月额度（若接口有）"
+        ? "统一账单账号：周限百分比已返回；已显示预付余额/按量字段"
+        : "统一账单账号：接口未返回周限百分比；已显示预付余额/按量字段"
     }
 
     card.weeklyPercent = weeklyPercent
@@ -957,6 +961,12 @@
         card.apiReset = monthlyConfig.billingPeriodEnd
           ? formatResetShort(ctx, monthlyConfig.billingPeriodEnd)
           : null
+        // Design ref: "已用 -- · 余额 US$xx · 重置 mm/dd hh:mm"
+        const balUsd = (limitUnits / CENTS_PER_DOLLAR).toFixed(2)
+        card.apiPrepaidText =
+          "已用 -- · 余额 US$" +
+          balUsd +
+          (card.apiReset ? " · 重置 " + card.apiReset : "")
       }
     }
 
@@ -1005,21 +1015,24 @@
     const usage = buildUsageLines(ctx, creditsConfig, monthlyConfig)
     for (let i = 0; i < usage.lines.length; i++) lines.push(usage.lines[i])
 
-    if (weeklyPercent !== null) {
-      const limited = weeklyPercent >= 90
-      card.status = limited ? "限制" : "正常"
-      card.statusColor = limited ? "#f59e0b" : "#22c55e"
-      lines.push(
-        ctx.line.badge({
-          label: "状态",
-          text: card.status,
-          color: card.statusColor,
-        })
-      )
+    // Status priority: probe failures → 警告; weekly >=90 → 限制; else 正常
+    if (failCount > 0) {
+      card.status = "警告"
+      card.statusColor = "#f59e0b"
+    } else if (weeklyPercent !== null && weeklyPercent >= 90) {
+      card.status = "限制"
+      card.statusColor = "#f59e0b"
     } else {
       card.status = "正常"
       card.statusColor = "#22c55e"
     }
+    lines.push(
+      ctx.line.badge({
+        label: "状态",
+        text: card.status,
+        color: card.statusColor,
+      })
+    )
 
     let planName = null
     if (settingsOk) {
@@ -1030,8 +1043,8 @@
     card.tier = tier
     card.planName = planName
     const plan = formatPlanWithTier(planName, tier)
-    card.planLine =
-      plan + (card.refreshedAt ? " · 刷新 " + card.refreshedAt : "")
+    // Reference: "tier 1 · SuperGrok · 刷新 07/16 15:32"
+    card.planLine = plan + (card.refreshedAt ? " · 刷新 " + card.refreshedAt : "")
 
     if (tierBadge) {
       lines.push(
