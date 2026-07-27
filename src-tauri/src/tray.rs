@@ -230,6 +230,8 @@ pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
                     log::debug!("tray click: showing panel");
 
                     let _ = window.unminimize();
+                    // Position first, then show — avoid flash at old/wrong coords.
+                    position_panel_at_tray_icon(app_handle, rect.position, rect.size);
                     let _ = window.show();
                     position_panel_at_tray_icon(app_handle, rect.position, rect.size);
                     let _ = window.set_focus();

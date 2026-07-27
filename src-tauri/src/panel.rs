@@ -56,24 +56,83 @@ fn is_window_visible(window: &WebviewWindow) -> bool {
     window.is_visible().unwrap_or(false)
 }
 
-/// Retrieve the tray icon rect and position the panel beneath it.
-/// No-ops gracefully if the tray icon or its rect is unavailable.
+/// Retrieve the tray icon rect and position the panel near it.
+/// Falls back to work-area bottom-right (taskbar corner) when tray rect is missing —
+/// Windows tray.rect() is flaky and previously left the panel stranded / "flying".
 fn position_panel_from_tray(app_handle: &AppHandle) {
     let Some(tray) = app_handle.tray_by_id("tray") else {
-        log::debug!("position_panel_from_tray: tray icon not found");
+        log::debug!("position_panel_from_tray: tray icon not found, using taskbar corner");
+        position_panel_taskbar_corner(app_handle);
         return;
     };
     match tray.rect() {
         Ok(Some(rect)) => {
+            // Guard obviously bad rects (0,0 with zero size → multi-monitor glitch)
+            let (px, py) = match &rect.position {
+                Position::Physical(p) => (p.x, p.y),
+                Position::Logical(p) => (p.x as i32, p.y as i32),
+            };
+            let (sw, sh) = match &rect.size {
+                Size::Physical(s) => (s.width, s.height),
+                Size::Logical(s) => (s.width as u32, s.height as u32),
+            };
+            if sw == 0 || sh == 0 || (px == 0 && py == 0 && sw < 8) {
+                log::debug!("position_panel_from_tray: suspicious tray rect, using taskbar corner");
+                position_panel_taskbar_corner(app_handle);
+                return;
+            }
             position_panel_at_tray_icon(app_handle, rect.position, rect.size);
         }
         Ok(None) => {
-            log::debug!("position_panel_from_tray: tray rect not available yet");
+            log::debug!("position_panel_from_tray: tray rect not available, using taskbar corner");
+            position_panel_taskbar_corner(app_handle);
         }
         Err(e) => {
-            log::warn!("position_panel_from_tray: failed to get tray rect: {}", e);
+            log::warn!(
+                "position_panel_from_tray: failed to get tray rect ({}): using taskbar corner",
+                e
+            );
+            position_panel_taskbar_corner(app_handle);
         }
     }
+}
+
+/// Pin panel to bottom-right of the primary (or current) monitor work area —
+/// same stable behavior as Electron OpenUsage Grok.
+pub fn position_panel_taskbar_corner(app_handle: &AppHandle) {
+    let Some(window) = app_handle.get_webview_window("main") else {
+        return;
+    };
+
+    let monitor = match window.current_monitor() {
+        Ok(Some(m)) => m,
+        _ => match window.primary_monitor() {
+            Ok(Some(m)) => m,
+            _ => return,
+        },
+    };
+
+    let mon_x = monitor.position().x as f64;
+    let mon_y = monitor.position().y as f64;
+    let mon_w = monitor.size().width as f64;
+    let mon_h = monitor.size().height as f64;
+    // Approximate taskbar: keep a bottom margin (work area is not exposed on all APIs).
+    // 48px is a common taskbar height; clamp panel above it.
+    let taskbar_guess = 48.0 * monitor.scale_factor().max(1.0);
+    let margin = 8.0;
+
+    let (panel_w, panel_h) = match window.outer_size() {
+        Ok(s) => (s.width as f64, s.height as f64),
+        Err(_) => (400.0 * monitor.scale_factor(), 640.0 * monitor.scale_factor()),
+    };
+
+    let x = (mon_x + mon_w - panel_w - margin).max(mon_x + margin);
+    let y = (mon_y + mon_h - taskbar_guess - panel_h - margin).max(mon_y + margin);
+
+    let _ = window.set_position(Position::Physical(tauri::PhysicalPosition {
+        x: x.round() as i32,
+        y: y.round() as i32,
+    }));
 }
 
 /// Notify the webview that the panel was just snapped to the tray.
@@ -91,7 +150,10 @@ fn emit_panel_shown(app_handle: &AppHandle) {
 /// Show the panel (initializing if needed), positioned under the tray icon.
 pub fn show_panel(app_handle: &AppHandle) {
     if let Some(window) = get_or_init_panel!(app_handle) {
+        // Position before show to reduce jump/flash (same idea as Electron).
+        position_panel_from_tray(app_handle);
         show_window(&window);
+        // Re-assert after show (WM / DPI may nudge once).
         position_panel_from_tray(app_handle);
         emit_panel_shown(app_handle);
     }
@@ -123,6 +185,7 @@ pub fn toggle_panel(app_handle: &AppHandle) {
         hide_window(&window);
     } else {
         log::debug!("toggle_panel: showing panel");
+        position_panel_from_tray(app_handle);
         show_window(&window);
         position_panel_from_tray(app_handle);
         emit_panel_shown(app_handle);
@@ -251,19 +314,34 @@ pub fn position_panel_at_tray_icon(
         .max(mon_phys_x + margin)
         .min(mon_phys_x + mon_phys_w - panel_phys_w - margin);
 
-    // Windows tray is typically at the bottom. Place the panel just above the
-    // tray icon so the bottom edge stays glued to the taskbar after resizes.
+    // Prefer gluing the panel bottom just above the tray icon (taskbar).
+    // Also clamp so the panel never jumps above the monitor (common "flying" bug
+    // when tray Y is wrong or DPI-mixed).
     let gap: f64 = 4.0;
     let above_y = icon_phys_y - panel_phys_h - gap;
     let below_y = icon_phys_y + icon_phys_h + gap;
-    let panel_y = if above_y >= mon_phys_y + margin {
-        above_y
+    // If tray sits in the lower 40% of the monitor, always use "above icon".
+    let tray_in_lower = icon_center_y > mon_phys_y + mon_phys_h * 0.6;
+    let mut panel_y = if tray_in_lower || above_y >= mon_phys_y + margin {
+        above_y.max(mon_phys_y + margin)
     } else {
-        // Top/side taskbar fallback: sit below the icon, still on-screen.
         below_y
             .min(mon_phys_y + mon_phys_h - panel_phys_h - margin)
             .max(mon_phys_y + margin)
     };
+
+    // Final clamp — never off-screen
+    panel_y = panel_y
+        .max(mon_phys_y + margin)
+        .min(mon_phys_y + mon_phys_h - panel_phys_h - margin);
+
+    // If calculation still looks broken (e.g. panel top near 0 while tray is bottom),
+    // fall back to stable taskbar corner.
+    if tray_in_lower && panel_y + panel_phys_h < icon_phys_y - 80.0 {
+        log::debug!("tray position inconsistent; using taskbar corner fallback");
+        position_panel_taskbar_corner(app_handle);
+        return;
+    }
 
     let _ = window.set_position(Position::Physical(tauri::PhysicalPosition {
         x: panel_x.round() as i32,
