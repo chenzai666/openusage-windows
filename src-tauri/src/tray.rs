@@ -230,10 +230,10 @@ pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
                     log::debug!("tray click: showing panel");
 
                     let _ = window.unminimize();
-                    // Position first, then show — avoid flash at old/wrong coords.
-                    position_panel_at_tray_icon(app_handle, rect.position, rect.size);
+                    // Windows: always primary bottom-right (taskbar). Tray rect is flaky.
+                    crate::panel::position_panel_taskbar_corner(app_handle);
                     let _ = window.show();
-                    position_panel_at_tray_icon(app_handle, rect.position, rect.size);
+                    crate::panel::position_panel_taskbar_corner(app_handle);
                     let _ = window.set_focus();
                     // Tell the frontend to drop its bottom-edge lock and re-measure.
                     crate::panel::notify_panel_shown(app_handle);

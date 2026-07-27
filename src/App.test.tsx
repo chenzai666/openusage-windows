@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
   invokeMock: vi.fn(),
   isTauriMock: vi.fn(() => false),
   setSizeMock: vi.fn(),
-  currentMonitorMock: vi.fn(),
+  primaryMonitorMock: vi.fn(),
   startBatchMock: vi.fn(),
   savePluginSettingsMock: vi.fn(),
   loadPluginSettingsMock: vi.fn(),
@@ -191,7 +191,7 @@ vi.mock("@tauri-apps/api/window", () => ({
       this.y = y
     }
   },
-  currentMonitor: state.currentMonitorMock,
+  primaryMonitor: state.primaryMonitorMock,
 }))
 
 vi.mock("@tauri-apps/api/app", () => ({
@@ -270,7 +270,7 @@ describe("App", () => {
     state.isTauriMock.mockReset()
     state.isTauriMock.mockReturnValue(false)
     state.setSizeMock.mockReset()
-    state.currentMonitorMock.mockReset()
+    state.primaryMonitorMock.mockReset()
     state.startBatchMock.mockReset()
     state.savePluginSettingsMock.mockReset()
     state.loadPluginSettingsMock.mockReset()
@@ -341,7 +341,11 @@ describe("App", () => {
         return 100
       },
     })
-    state.currentMonitorMock.mockResolvedValue({ size: { height: 1000 } })
+    state.primaryMonitorMock.mockResolvedValue({
+      size: { width: 1920, height: 1000 },
+      position: { x: 0, y: 0 },
+      scaleFactor: 1,
+    })
     state.startBatchMock.mockResolvedValue(["a"])
     state.trayGetByIdMock.mockResolvedValue({
       setIcon: state.traySetIconMock.mockResolvedValue(undefined),
@@ -1269,7 +1273,7 @@ describe("App", () => {
 
   it("uses fallback monitor sizing when monitor missing", async () => {
     state.isTauriMock.mockReturnValue(true)
-    state.currentMonitorMock.mockResolvedValueOnce(null)
+    state.primaryMonitorMock.mockResolvedValueOnce(null)
     render(<App />)
     await waitFor(() => expect(state.setSizeMock).toHaveBeenCalled())
   })

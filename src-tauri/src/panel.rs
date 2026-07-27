@@ -56,57 +56,42 @@ fn is_window_visible(window: &WebviewWindow) -> bool {
     window.is_visible().unwrap_or(false)
 }
 
-/// Retrieve the tray icon rect and position the panel near it.
-/// Falls back to work-area bottom-right (taskbar corner) when tray rect is missing —
-/// Windows tray.rect() is flaky and previously left the panel stranded / "flying".
+/// Position the panel for tray open.
+///
+/// On Windows we **always** pin to the primary monitor bottom-right (taskbar /
+/// notification area). Following `tray.rect()` caused the panel to open on the
+/// left of multi-monitor setups when rect was wrong or DPI-mixed.
 fn position_panel_from_tray(app_handle: &AppHandle) {
-    let Some(tray) = app_handle.tray_by_id("tray") else {
-        log::debug!("position_panel_from_tray: tray icon not found, using taskbar corner");
+    #[cfg(windows)]
+    {
         position_panel_taskbar_corner(app_handle);
         return;
-    };
-    match tray.rect() {
-        Ok(Some(rect)) => {
-            // Guard obviously bad rects (0,0 with zero size → multi-monitor glitch)
-            let (px, py) = match &rect.position {
-                Position::Physical(p) => (p.x, p.y),
-                Position::Logical(p) => (p.x as i32, p.y as i32),
-            };
-            let (sw, sh) = match &rect.size {
-                Size::Physical(s) => (s.width, s.height),
-                Size::Logical(s) => (s.width as u32, s.height as u32),
-            };
-            if sw == 0 || sh == 0 || (px == 0 && py == 0 && sw < 8) {
-                log::debug!("position_panel_from_tray: suspicious tray rect, using taskbar corner");
-                position_panel_taskbar_corner(app_handle);
-                return;
+    }
+    #[cfg(not(windows))]
+    {
+        let Some(tray) = app_handle.tray_by_id("tray") else {
+            position_panel_taskbar_corner(app_handle);
+            return;
+        };
+        match tray.rect() {
+            Ok(Some(rect)) => {
+                position_panel_at_tray_icon(app_handle, rect.position, rect.size);
             }
-            position_panel_at_tray_icon(app_handle, rect.position, rect.size);
-        }
-        Ok(None) => {
-            log::debug!("position_panel_from_tray: tray rect not available, using taskbar corner");
-            position_panel_taskbar_corner(app_handle);
-        }
-        Err(e) => {
-            log::warn!(
-                "position_panel_from_tray: failed to get tray rect ({}): using taskbar corner",
-                e
-            );
-            position_panel_taskbar_corner(app_handle);
+            _ => position_panel_taskbar_corner(app_handle),
         }
     }
 }
 
-/// Pin panel to bottom-right of the primary (or current) monitor work area —
-/// same stable behavior as Electron OpenUsage Grok.
+/// Pin panel to bottom-right of the **primary** monitor (tray zone).
+/// Never uses `current_monitor()` — a left-parked window would keep choosing the left screen.
 pub fn position_panel_taskbar_corner(app_handle: &AppHandle) {
     let Some(window) = app_handle.get_webview_window("main") else {
         return;
     };
 
-    let monitor = match window.current_monitor() {
+    let monitor = match window.primary_monitor() {
         Ok(Some(m)) => m,
-        _ => match window.primary_monitor() {
+        _ => match window.current_monitor() {
             Ok(Some(m)) => m,
             _ => return,
         },
@@ -116,19 +101,26 @@ pub fn position_panel_taskbar_corner(app_handle: &AppHandle) {
     let mon_y = monitor.position().y as f64;
     let mon_w = monitor.size().width as f64;
     let mon_h = monitor.size().height as f64;
-    // Approximate taskbar: keep a bottom margin (work area is not exposed on all APIs).
-    // 48px is a common taskbar height; clamp panel above it.
-    let taskbar_guess = 48.0 * monitor.scale_factor().max(1.0);
-    let margin = 8.0;
+    let scale = monitor.scale_factor().max(0.5);
+    // Taskbar ~40–48 DIP; keep panel above it.
+    let taskbar_guess = 48.0 * scale;
+    let margin = 8.0 * scale;
 
-    let (panel_w, panel_h) = match window.outer_size() {
+    let (raw_w, raw_h) = match window.outer_size() {
         Ok(s) => (s.width as f64, s.height as f64),
-        Err(_) => (400.0 * monitor.scale_factor(), 640.0 * monitor.scale_factor()),
+        Err(_) => (400.0 * scale, 640.0 * scale),
     };
+    // Fit inside monitor so right-align math cannot invert to the left edge.
+    let panel_w = raw_w.min(mon_w - margin * 2.0).max(100.0);
+    let panel_h = raw_h.min(mon_h - taskbar_guess - margin * 2.0).max(100.0);
 
-    let x = (mon_x + mon_w - panel_w - margin).max(mon_x + margin);
-    let y = (mon_y + mon_h - taskbar_guess - panel_h - margin).max(mon_y + margin);
+    let x = mon_x + mon_w - panel_w - margin;
+    let y = mon_y + mon_h - taskbar_guess - panel_h - margin;
 
+    let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+        width: panel_w.round() as u32,
+        height: panel_h.round() as u32,
+    }));
     let _ = window.set_position(Position::Physical(tauri::PhysicalPosition {
         x: x.round() as i32,
         y: y.round() as i32,

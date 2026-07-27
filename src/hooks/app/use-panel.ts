@@ -5,7 +5,7 @@ import {
   getCurrentWindow,
   PhysicalPosition,
   PhysicalSize,
-  currentMonitor,
+  primaryMonitor,
 } from "@tauri-apps/api/window"
 import type { ActiveView } from "@/components/side-nav"
 import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
@@ -198,20 +198,68 @@ export function usePanel({
     let pending = false
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    const measureMaxHeight = async (): Promise<{ logical: number; physical: number }> => {
+    /**
+     * Always use the *primary* monitor (Windows tray / taskbar zone).
+     * Never currentMonitor() — a left-parked window would keep choosing the left screen
+     * and "fly" while content resizes (unlike Electron openusage-grok which stays put).
+     */
+    const measurePrimary = async (): Promise<{
+      maxLogical: number
+      maxPhysical: number
+      /** Physical bottom of work area (above taskbar guess). */
+      workBottom: number
+      monRight: number
+      monX: number
+      monY: number
+      monW: number
+      monH: number
+      scale: number
+    } | null> => {
       const factor = window.devicePixelRatio || 1
       try {
-        const monitor = await currentMonitor()
+        const monitor = await primaryMonitor()
         if (monitor) {
-          const physical = Math.floor(monitor.size.height * MAX_HEIGHT_FRACTION_OF_MONITOR)
-          return { physical, logical: Math.floor(physical / factor) }
+          const monW = monitor.size.width
+          const monH = monitor.size.height
+          const monX = monitor.position.x
+          const monY = monitor.position.y
+          const scale = monitor.scaleFactor || factor
+          // ~48 DIP taskbar + 8 DIP margin — match Rust position_panel_taskbar_corner
+          const taskbar = Math.round(48 * scale)
+          const margin = Math.round(8 * scale)
+          const workBottom = monY + monH - taskbar - margin
+          const maxPhysical = Math.floor(monH * MAX_HEIGHT_FRACTION_OF_MONITOR)
+          return {
+            maxLogical: Math.floor(maxPhysical / factor),
+            maxPhysical,
+            workBottom,
+            monRight: monX + monW,
+            monX,
+            monY,
+            monW,
+            monH,
+            scale,
+          }
         }
       } catch {
         // fall through
       }
       const screenAvailHeight = Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX
       const logical = Math.floor(screenAvailHeight * MAX_HEIGHT_FRACTION_OF_MONITOR)
-      return { logical, physical: Math.floor(logical * factor) }
+      const workBottom = Math.floor(
+        (Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX) * factor
+      )
+      return {
+        maxLogical: logical,
+        maxPhysical: Math.floor(logical * factor),
+        workBottom,
+        monRight: Math.floor((Number(window.screen?.availWidth) || 1280) * factor),
+        monX: 0,
+        monY: 0,
+        monW: Math.floor((Number(window.screen?.availWidth) || 1280) * factor),
+        monH: Math.floor((Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX) * factor),
+        scale: factor,
+      }
     }
 
     const applyResize = async () => {
@@ -223,8 +271,8 @@ export function usePanel({
       const width = Math.ceil(logicalWidth * factor)
       const desiredHeightLogical = Math.max(1, el.scrollHeight)
 
-      const maxH = await measureMaxHeight()
-      if (cancelled) return
+      const primary = await measurePrimary()
+      if (cancelled || !primary) return
 
       // Workbench uses more of the monitor height (near full work area).
       const heightCapLogical = workbench
@@ -232,10 +280,10 @@ export function usePanel({
             (Number(window.screen?.availHeight) || MAX_HEIGHT_FALLBACK_PX) *
               WORKBENCH_MAX_HEIGHT_FRACTION
           )
-        : maxH.logical
+        : primary.maxLogical
       const heightCapPhysical = workbench
         ? Math.floor(heightCapLogical * factor)
-        : maxH.physical
+        : primary.maxPhysical
 
       if (maxPanelHeightPxRef.current !== heightCapLogical) {
         maxPanelHeightPxRef.current = heightCapLogical
@@ -253,45 +301,27 @@ export function usePanel({
         ])
         if (cancelled) return
 
-        // Lock bottom edge the first time we see a real on-screen position.
-        // Subsequent provider switches only move the top edge.
-        if (bottomEdgePhysRef.current === null) {
-          bottomEdgePhysRef.current = pos.y + size.height
-        }
+        // Always glue bottom to primary work area (taskbar), not to wherever we
+        // last appeared — that was the main "window flies around" cause.
+        bottomEdgePhysRef.current = primary.workBottom
+
+        const margin = Math.round(8 * primary.scale)
+        // Always pin X to primary right edge (same as Electron positionNearTaskbar).
+        const nextX = Math.round(primary.monRight - width - margin)
+        const nextY = Math.round(primary.workBottom - height)
 
         const widthChanged = Math.abs(size.width - width) > SIZE_EPSILON_PX
         const heightChanged = Math.abs(size.height - height) > SIZE_EPSILON_PX
-        if (!widthChanged && !heightChanged) {
+        const xChanged = Math.abs(pos.x - nextX) > SIZE_EPSILON_PX
+        const yChanged = Math.abs(pos.y - nextY) > SIZE_EPSILON_PX
+        if (!widthChanged && !heightChanged && !xChanged && !yChanged) {
           return
         }
 
-        const bottom = bottomEdgePhysRef.current
-        const nextY = Math.round(bottom - height)
-        const nextX = pos.x
-
-        // Size first (Windows keeps top-left), then snap top so bottom matches lock.
+        // Size first (Windows keeps top-left), then snap to primary bottom-right.
         await currentWindow.setSize(new PhysicalSize(width, height))
         if (cancelled) return
         await currentWindow.setPosition(new PhysicalPosition(nextX, nextY))
-        if (cancelled) return
-
-        // Re-assert the lock from our intended bottom (not OS-clamped drift),
-        // unless the window was pushed fully off-monitor (then adopt OS result).
-        try {
-          const finalPos = await currentWindow.outerPosition()
-          const finalSize = await currentWindow.outerSize()
-          const intendedBottom = bottom
-          const actualBottom = finalPos.y + finalSize.height
-          // If OS honored our bottom within a few px, keep the locked value.
-          if (Math.abs(actualBottom - intendedBottom) <= 4) {
-            bottomEdgePhysRef.current = intendedBottom
-          } else {
-            // Large clamp (e.g. multi-monitor edge) — follow the OS.
-            bottomEdgePhysRef.current = actualBottom
-          }
-        } catch {
-          // keep previous lock
-        }
       } catch (e) {
         console.error("Failed to resize window:", e)
       }

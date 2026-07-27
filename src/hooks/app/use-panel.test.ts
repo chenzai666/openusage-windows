@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
-  currentMonitorMock,
+  primaryMonitorMock,
   getCurrentWindowMock,
   invokeMock,
   isTauriMock,
@@ -12,7 +12,7 @@ const {
   isTauriMock: vi.fn(),
   listenMock: vi.fn(),
   getCurrentWindowMock: vi.fn(),
-  currentMonitorMock: vi.fn(),
+  primaryMonitorMock: vi.fn(),
 }))
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -26,7 +26,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: getCurrentWindowMock,
-  currentMonitor: currentMonitorMock,
+  primaryMonitor: primaryMonitorMock,
   PhysicalSize: class PhysicalSize {
     width: number
     height: number
@@ -55,12 +55,12 @@ describe("usePanel", () => {
     isTauriMock.mockReset()
     listenMock.mockReset()
     getCurrentWindowMock.mockReset()
-    currentMonitorMock.mockReset()
+    primaryMonitorMock.mockReset()
 
     isTauriMock.mockReturnValue(true)
     invokeMock.mockResolvedValue(undefined)
     listenMock.mockResolvedValue(vi.fn())
-    currentMonitorMock.mockResolvedValue(null)
+    primaryMonitorMock.mockResolvedValue(null)
     getCurrentWindowMock.mockReturnValue({
       setSize: vi.fn().mockResolvedValue(undefined),
       setPosition: vi.fn().mockResolvedValue(undefined),
@@ -321,21 +321,23 @@ describe("usePanel", () => {
     expect(setActiveView).toHaveBeenCalledWith("b")
   })
 
-  it("keeps the bottom edge fixed when content height changes", async () => {
+  it("pins to primary monitor bottom-right when content height changes", async () => {
     const { render } = await import("@testing-library/react")
     const React = await import("react")
 
     const setSize = vi.fn().mockResolvedValue(undefined)
     const setPosition = vi.fn().mockResolvedValue(undefined)
-    // Window currently 900px tall with top at y=50 → bottom edge = 950
+    // Even if the window was left-parked, resize must snap to primary bottom-right.
     getCurrentWindowMock.mockReturnValue({
       setSize,
       setPosition,
       outerSize: vi.fn().mockResolvedValue({ width: 800, height: 900 }),
-      outerPosition: vi.fn().mockResolvedValue({ x: 100, y: 50 }),
+      outerPosition: vi.fn().mockResolvedValue({ x: 10, y: 50 }),
     })
-    currentMonitorMock.mockResolvedValue({
+    primaryMonitorMock.mockResolvedValue({
       size: { width: 1920, height: 1080 },
+      position: { x: 0, y: 0 },
+      scaleFactor: 1,
     })
     invokeMock.mockClear()
     invokeMock.mockResolvedValue(undefined)
@@ -383,10 +385,11 @@ describe("usePanel", () => {
         { timeout: 2000 }
       )
 
-      // Bottom was 50+900=950; new height 360 → top should be 950-360=590
+      // workBottom = 1080 - 48 - 8 = 1024; width=400; x = 1920 - 400 - 8 = 1512
+      // y = 1024 - 360 = 664
       const lastPos = setPosition.mock.calls.at(-1)?.[0] as { x: number; y: number }
-      expect(lastPos.x).toBe(100)
-      expect(lastPos.y).toBe(950 - contentLogical)
+      expect(lastPos.x).toBe(1512)
+      expect(lastPos.y).toBe(1024 - contentLogical)
 
       // Must NOT re-query tray on every content resize (that flung the window up).
       expect(invokeMock).not.toHaveBeenCalledWith("reanchor_panel")
