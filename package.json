@@ -13,7 +13,11 @@
     "test:coverage": "vitest run --coverage.enabled",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "dev:grok": "vite --mode grok",
+    "build:grok": "tsc && vite build --mode grok",
+    "tauri:dev:grok": "tauri dev --config src-tauri/tauri.grok.conf.json",
+    "tauri:build:grok": "tauri build --config src-tauri/tauri.grok.conf.json"
   },
   "dependencies": {
     "@aptabase/tauri": "^0.4.1",

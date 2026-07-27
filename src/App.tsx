@@ -10,7 +10,13 @@ import { useSettingsPluginList } from "@/hooks/app/use-settings-plugin-list"
 import { useSettingsSystemActions } from "@/hooks/app/use-settings-system-actions"
 import { useSettingsTheme } from "@/hooks/app/use-settings-theme"
 import { useTrayIcon } from "@/hooks/app/use-tray-icon"
-import { REFRESH_COOLDOWN_MS, savePluginSettings } from "@/lib/settings"
+import { applyGrokOnlyPluginSettings } from "@/lib/app-mode"
+import {
+  REFRESH_COOLDOWN_MS,
+  normalizePluginSettings,
+  saveGrokOnlyMode,
+  savePluginSettings,
+} from "@/lib/settings"
 import { type PluginContextAction } from "@/components/side-nav"
 import { useAppPluginStore } from "@/stores/app-plugin-store"
 import { useAppPreferencesStore } from "@/stores/app-preferences-store"
@@ -60,6 +66,8 @@ function App() {
     setTimeFormatMode,
     setGlobalShortcut,
     setStartOnLogin,
+    grokOnlyMode,
+    setGrokOnlyMode,
   } = useAppPreferencesStore(
     useShallow((state) => ({
       autoUpdateInterval: state.autoUpdateInterval,
@@ -77,6 +85,8 @@ function App() {
       setTimeFormatMode: state.setTimeFormatMode,
       setGlobalShortcut: state.setGlobalShortcut,
       setStartOnLogin: state.setStartOnLogin,
+      grokOnlyMode: state.grokOnlyMode,
+      setGrokOnlyMode: state.setGrokOnlyMode,
     }))
   )
 
@@ -124,6 +134,7 @@ function App() {
     setDisplayMode,
     setMenubarIconStyle,
     setMenubarMetric,
+    setGrokOnlyMode,
     setResetTimerDisplayMode,
     setTimeFormatMode,
     setGlobalShortcut,
@@ -237,11 +248,56 @@ function App() {
     [pluginStates]
   )
 
+  const handleGrokOnlyModeChange = useCallback(
+    async (enabled: boolean) => {
+      setGrokOnlyMode(enabled)
+      try {
+        await saveGrokOnlyMode(enabled)
+      } catch (e) {
+        console.error("Failed to save grok-only mode:", e)
+      }
+      if (!pluginSettings || pluginsMeta.length === 0) return
+      const knownIds = pluginsMeta.map((p) => p.id)
+      const next = enabled
+        ? applyGrokOnlyPluginSettings(pluginSettings, knownIds)
+        : normalizePluginSettings(pluginSettings, pluginsMeta, { grokOnly: false })
+      // When turning off, re-enable default set for newly free plugins still disabled
+      setPluginSettings(next)
+      try {
+        await savePluginSettings(next)
+      } catch (e) {
+        console.error("Failed to save plugins after grok-only toggle:", e)
+      }
+      scheduleTrayIconUpdate("settings", 0)
+      if (enabled) {
+        setActiveView("home")
+        void handleRetryPlugin("grok")
+      }
+    },
+    [
+      handleRetryPlugin,
+      pluginSettings,
+      pluginsMeta,
+      scheduleTrayIconUpdate,
+      setActiveView,
+      setGrokOnlyMode,
+      setPluginSettings,
+    ]
+  )
+
+  // Nav: in Grok-only mode only surface Grok (plus home/settings chrome)
+  const navPluginsGrok = grokOnlyMode
+    ? navPlugins.filter((p) => p.id === "grok")
+    : navPlugins
+  const displayPluginsGrok = grokOnlyMode
+    ? displayPlugins.filter((p) => p.meta.id === "grok")
+    : displayPlugins
+
   return (
     <AppShell
       onRefreshAll={handleRefreshAll}
-      navPlugins={navPlugins}
-      displayPlugins={displayPlugins}
+      navPlugins={navPluginsGrok}
+      displayPlugins={displayPluginsGrok}
       settingsPlugins={settingsPlugins}
       autoUpdateNextAt={autoUpdateNextAt}
       selectedPlugin={selectedPlugin}
@@ -263,6 +319,7 @@ function App() {
         traySettingsPreview,
         onGlobalShortcutChange: handleGlobalShortcutChange,
         onStartOnLoginChange: handleStartOnLoginChange,
+        onGrokOnlyModeChange: handleGrokOnlyModeChange,
         onGrokAccountsChanged: () => handleRetryPlugin("grok"),
         autoUpdateNextAt,
       }}

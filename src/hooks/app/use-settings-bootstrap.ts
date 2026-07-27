@@ -30,6 +30,7 @@ import {
   loadStartOnLogin,
   loadThemeMode,
   loadTimeFormatMode,
+  loadGrokOnlyMode,
   normalizePluginSettings,
   savePluginSettings,
   type AutoUpdateIntervalMinutes,
@@ -55,6 +56,7 @@ type UseSettingsBootstrapArgs = {
   setStartOnLogin: (value: boolean) => void
   setMenubarIconStyle: (value: MenubarIconStyle) => void
   setMenubarMetric: (value: MenubarMetric) => void
+  setGrokOnlyMode: (value: boolean) => void
   setLoadingForPlugins: (ids: string[]) => void
   setErrorForPlugins: (ids: string[], error: string) => void
   startBatch: (pluginIds?: string[]) => Promise<string[] | undefined>
@@ -72,6 +74,7 @@ export function useSettingsBootstrap({
   setStartOnLogin,
   setMenubarIconStyle,
   setMenubarMetric,
+  setGrokOnlyMode,
   setLoadingForPlugins,
   setErrorForPlugins,
   startBatch,
@@ -98,9 +101,18 @@ export function useSettingsBootstrap({
         if (!isMounted) return
         setPluginsMeta(availablePlugins)
 
+        let grokOnly = false
+        try {
+          grokOnly = await loadGrokOnlyMode()
+        } catch (error) {
+          console.error("Failed to load grok-only mode:", error)
+        }
+
         const storedSettings = await loadPluginSettings()
         const migratedSettings = migrateWindsurfToDevin(storedSettings)
-        const normalized = normalizePluginSettings(migratedSettings, availablePlugins)
+        const normalized = normalizePluginSettings(migratedSettings, availablePlugins, {
+          grokOnly,
+        })
         if (!arePluginSettingsEqual(storedSettings, normalized)) {
           await savePluginSettings(normalized)
         }
@@ -180,6 +192,7 @@ export function useSettingsBootstrap({
         }
 
         if (isMounted) {
+          setGrokOnlyMode(grokOnly)
           setPluginSettings(normalized)
           setAutoUpdateInterval(storedInterval)
           setThemeMode(storedThemeMode)
@@ -221,6 +234,7 @@ export function useSettingsBootstrap({
     setLoadingForPlugins,
     setMenubarIconStyle,
     setMenubarMetric,
+    setGrokOnlyMode,
     migrateWindsurfToDevin,
     migrateLegacyTraySettings,
     setPluginSettings,

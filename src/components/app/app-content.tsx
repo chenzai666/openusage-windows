@@ -39,6 +39,7 @@ export type AppContentActionProps = {
   traySettingsPreview: TraySettingsPreview
   onGlobalShortcutChange: (value: GlobalShortcut) => void
   onStartOnLoginChange: (value: boolean) => void
+  onGrokOnlyModeChange?: (value: boolean) => void
   onGrokAccountsChanged?: () => void
   autoUpdateNextAt?: number | null
 }
@@ -63,6 +64,7 @@ export function AppContent({
   traySettingsPreview,
   onGlobalShortcutChange,
   onStartOnLoginChange,
+  onGrokOnlyModeChange,
   onGrokAccountsChanged,
   autoUpdateNextAt = null,
 }: AppContentProps) {
@@ -84,6 +86,7 @@ export function AppContent({
     globalShortcut,
     themeMode,
     startOnLogin,
+    grokOnlyMode,
   } = useAppPreferencesStore(
     useShallow((state) => ({
       displayMode: state.displayMode,
@@ -95,6 +98,7 @@ export function AppContent({
       globalShortcut: state.globalShortcut,
       themeMode: state.themeMode,
       startOnLogin: state.startOnLogin,
+      grokOnlyMode: state.grokOnlyMode,
     }))
   )
 
@@ -143,6 +147,8 @@ export function AppContent({
         onGlobalShortcutChange={onGlobalShortcutChange}
         startOnLogin={startOnLogin}
         onStartOnLoginChange={onStartOnLoginChange}
+        grokOnlyMode={grokOnlyMode}
+        onGrokOnlyModeChange={onGrokOnlyModeChange}
         onGrokAccountsChanged={onGrokAccountsChanged}
       />
     )

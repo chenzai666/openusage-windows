@@ -12,6 +12,7 @@ const {
   loadAutoUpdateIntervalMock,
   loadDisplayModeMock,
   loadGlobalShortcutMock,
+  loadGrokOnlyModeMock,
   loadMenubarIconStyleMock,
   loadMenubarMetricMock,
   loadPluginSettingsMock,
@@ -34,6 +35,7 @@ const {
   loadAutoUpdateIntervalMock: vi.fn(),
   loadDisplayModeMock: vi.fn(),
   loadGlobalShortcutMock: vi.fn(),
+  loadGrokOnlyModeMock: vi.fn(),
   loadMenubarIconStyleMock: vi.fn(),
   loadMenubarMetricMock: vi.fn(),
   loadPluginSettingsMock: vi.fn(),
@@ -73,6 +75,7 @@ vi.mock("@/lib/settings", () => ({
   loadAutoUpdateInterval: loadAutoUpdateIntervalMock,
   loadDisplayMode: loadDisplayModeMock,
   loadGlobalShortcut: loadGlobalShortcutMock,
+  loadGrokOnlyMode: loadGrokOnlyModeMock,
   loadMenubarIconStyle: loadMenubarIconStyleMock,
   loadMenubarMetric: loadMenubarMetricMock,
   loadPluginSettings: loadPluginSettingsMock,
@@ -91,6 +94,7 @@ import { useSettingsBootstrap } from "@/hooks/app/use-settings-bootstrap"
 function createArgs() {
   return {
     setPluginSettings: vi.fn(),
+    setGrokOnlyMode: vi.fn(),
     setPluginsMeta: vi.fn(),
     setAutoUpdateInterval: vi.fn(),
     setThemeMode: vi.fn(),
@@ -144,6 +148,7 @@ describe("useSettingsBootstrap", () => {
       },
     ])
     loadPluginSettingsMock.mockResolvedValue({ order: ["codex"], disabled: [] })
+    loadGrokOnlyModeMock.mockResolvedValue(false)
     normalizePluginSettingsMock.mockImplementation((stored) => stored)
     arePluginSettingsEqualMock.mockReturnValue(true)
     loadAutoUpdateIntervalMock.mockResolvedValue(900)
@@ -244,7 +249,8 @@ describe("useSettingsBootstrap", () => {
     await waitFor(() => {
       expect(normalizePluginSettingsMock).toHaveBeenCalledWith(
         migratedSettings,
-        availablePlugins
+        availablePlugins,
+        { grokOnly: false }
       )
       expect(savePluginSettingsMock).toHaveBeenCalledWith(migratedSettings)
       expect(args.setPluginSettings).toHaveBeenCalledWith(migratedSettings)

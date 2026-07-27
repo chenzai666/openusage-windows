@@ -1,5 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import type { PluginMeta } from "@/lib/plugin-types";
+import { applyGrokOnlyPluginSettings, isGrokOnlyEnv } from "@/lib/app-mode";
 
 // Manual refresh cooldown (30s — was 5m, too long for short auto-refresh intervals)
 export const REFRESH_COOLDOWN_MS = 30_000;
@@ -46,6 +47,7 @@ const LEGACY_TRAY_SHOW_PERCENTAGE_KEY = "trayShowPercentage";
 const GLOBAL_SHORTCUT_KEY = "globalShortcut";
 const START_ON_LOGIN_KEY = "startOnLogin";
 const RETIREMENT_NOTICE_DISMISSED_AT_KEY = "retirementNoticeDismissedAt";
+const GROK_ONLY_MODE_KEY = "grokOnlyMode";
 
 // How long a dismissal lasts before the retirement notice is shown again (7 days).
 export const RETIREMENT_NOTICE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -125,7 +127,8 @@ export const TIME_FORMAT_OPTIONS: { value: TimeFormatMode; label: string }[] = [
 
 const store = new LazyStore(SETTINGS_STORE_PATH);
 
-const DEFAULT_ENABLED_PLUGINS = new Set(["claude", "codex", "cursor"]);
+// Grok is enabled by default so SuperGrok users see cards without hunting settings.
+const DEFAULT_ENABLED_PLUGINS = new Set(["grok", "claude", "codex", "cursor"]);
 
 export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   order: [],
@@ -213,7 +216,8 @@ export async function saveAutoUpdateInterval(
 
 export function normalizePluginSettings(
   settings: PluginSettings,
-  plugins: PluginMeta[]
+  plugins: PluginMeta[],
+  options?: { grokOnly?: boolean }
 ): PluginSettings {
   const knownIds = plugins.map((plugin) => plugin.id);
   const knownSet = new Set(knownIds);
@@ -240,7 +244,25 @@ export function normalizePluginSettings(
       disabled.push(id);
     }
   }
-  return { order, disabled };
+
+  const base = { order, disabled };
+  const grokOnly = options?.grokOnly === true || isGrokOnlyEnv();
+  if (grokOnly) {
+    return applyGrokOnlyPluginSettings(base, knownIds);
+  }
+  return base;
+}
+
+/** Persist "Grok 专用模式". Env VITE_GROK_ONLY=true always wins as on. */
+export async function loadGrokOnlyMode(): Promise<boolean> {
+  if (isGrokOnlyEnv()) return true;
+  const stored = await store.get<unknown>(GROK_ONLY_MODE_KEY);
+  return stored === true;
+}
+
+export async function saveGrokOnlyMode(enabled: boolean): Promise<void> {
+  await store.set(GROK_ONLY_MODE_KEY, enabled);
+  await store.save();
 }
 
 export function arePluginSettingsEqual(

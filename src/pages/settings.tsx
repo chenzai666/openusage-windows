@@ -285,6 +285,9 @@ interface SettingsPageProps {
   onGlobalShortcutChange: (value: GlobalShortcut) => void;
   startOnLogin: boolean;
   onStartOnLoginChange: (value: boolean) => void;
+  /** SuperGrok-only product mode: only Grok plugin enabled. */
+  grokOnlyMode?: boolean;
+  onGrokOnlyModeChange?: (value: boolean) => void;
   /** Re-probe Grok after account meta / login changes. */
   onGrokAccountsChanged?: () => void;
 }
@@ -312,6 +315,8 @@ export function SettingsPage({
   onGlobalShortcutChange,
   startOnLogin,
   onStartOnLoginChange,
+  grokOnlyMode = false,
+  onGrokOnlyModeChange,
   onGrokAccountsChanged,
 }: SettingsPageProps) {
   const sensors = useSensors(
@@ -568,9 +573,26 @@ export function SettingsPage({
         </label>
       </section>
       <section>
+        <h3 className="text-lg font-semibold mb-0">Grok 专用模式</h3>
+        <p className="text-sm text-muted-foreground mb-2">
+          只启用 SuperGrok / xAI，总览直接进入多账号卡片（关闭 Claude、Cursor 等其它提供商）
+        </p>
+        <label className="flex items-center gap-2 text-sm select-none text-foreground">
+          <Checkbox
+            key={`grok-only-${grokOnlyMode}`}
+            checked={grokOnlyMode}
+            disabled={!onGrokOnlyModeChange}
+            onCheckedChange={(checked) => onGrokOnlyModeChange?.(checked === true)}
+          />
+          仅 Grok（SuperGrok）
+        </label>
+      </section>
+      <section>
         <h3 className="text-lg font-semibold mb-0">提供商插件</h3>
         <p className="text-sm text-muted-foreground mb-2">
-          启用或关闭 AI 提供商
+          {grokOnlyMode
+            ? "Grok 专用模式下仅显示 Grok；关闭专用模式可管理全部提供商"
+            : "启用或关闭 AI 提供商"}
         </p>
         <div className="bg-muted/50 rounded-lg p-1 space-y-1">
           <DndContext
@@ -579,22 +601,26 @@ export function SettingsPage({
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={plugins.map((p) => p.id)}
+              items={(grokOnlyMode ? plugins.filter((p) => p.id === "grok") : plugins).map(
+                (p) => p.id
+              )}
               strategy={verticalListSortingStrategy}
             >
-              {plugins.map((plugin) => (
-                <SortablePluginItem
-                  key={plugin.id}
-                  plugin={plugin}
-                  onToggle={onToggle}
-                />
-              ))}
+              {(grokOnlyMode ? plugins.filter((p) => p.id === "grok") : plugins).map(
+                (plugin) => (
+                  <SortablePluginItem
+                    key={plugin.id}
+                    plugin={plugin}
+                    onToggle={onToggle}
+                  />
+                )
+              )}
             </SortableContext>
           </DndContext>
         </div>
       </section>
 
-      {plugins.some((p) => p.id === "grok" && p.enabled) && (
+      {(grokOnlyMode || plugins.some((p) => p.id === "grok" && p.enabled)) && (
         <GrokAccountsSection onAccountsChanged={onGrokAccountsChanged} />
       )}
     </div>

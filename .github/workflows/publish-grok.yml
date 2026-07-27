@@ -1,0 +1,102 @@
+# Build OpenUsage Grok (Tauri, Grok-only flavor) on GitHub-hosted Windows.
+#
+# Triggers:
+#   - workflow_dispatch (manual)
+#   - push tag grok-v*
+
+name: Publish Grok (Tauri)
+
+on:
+  push:
+    tags:
+      - "grok-v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub Release after build"
+        type: boolean
+        default: true
+      tag_name:
+        description: "Release tag (e.g. grok-v0.6.42). Empty = no tag release, artifacts only."
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-grok-windows:
+    name: Build OpenUsage Grok Windows
+    runs-on: windows-latest
+    env:
+      VITE_GROK_ONLY: "true"
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Bundle plugins
+        run: npm run bundle:plugins
+
+      - name: Build Grok flavor (NSIS + MSI)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_GROK_ONLY: "true"
+        with:
+          projectPath: .
+          tagName: ${{ (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.tag_name != '')) && env.RELEASE_TAG || '' }}
+          releaseName: ${{ (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.create_release && inputs.tag_name != '')) && format('OpenUsage Grok {0}', env.RELEASE_TAG) || '' }}
+          releaseBody: |
+            ## OpenUsage Grok ${{ env.RELEASE_TAG }}
+
+            Tauri 版 · **仅 Grok / SuperGrok** 多账号用量（`VITE_GROK_ONLY`）。
+
+            卡片 UI 与本仓库 Grok 参考布局一致。
+
+            ### 下载
+
+            | 文件 | 说明 |
+            |------|------|
+            | **NSIS**（`.exe`） | 安装包，推荐 |
+            | **MSI**（`.msi`） | 企业 / 静默安装 |
+
+            ### 说明
+
+            - 标识：`com.openusage.grok`
+            - 产品名：OpenUsage Grok
+            - 数据：`~/.grok/auth.json` + 应用插件 meta
+
+            由 GitHub Actions `windows-latest` 构建（含 MSVC）。
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+          args: --config src-tauri/tauri.grok.conf.json --bundles nsis,msi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openusage-grok-tauri-installers
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 30

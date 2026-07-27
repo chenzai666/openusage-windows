@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenUsage Grok",
+  "identifier": "com.openusage.grok",
+  "build": {
+    "beforeDevCommand": "npm run bundle:plugins && npm run dev:grok",
+    "beforeBuildCommand": "npm run bundle:plugins && npm run build:grok"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenUsage Grok"
+      }
+    ]
+  }
+}
