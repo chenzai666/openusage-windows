@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { invoke, isTauri } from "@tauri-apps/api/core"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import {
@@ -87,7 +87,12 @@ const actionClass =
   "h-7 gap-1 border-white/15 bg-white/5 text-[11px] text-white/80 hover:bg-white/10 hover:text-white"
 const iconClass = "h-7 w-7 text-white/60 hover:bg-white/10 hover:text-white"
 
-function quotaResetLabel(now: number, resetsAt: string, mode: ResetTimerDisplayMode, timeFormat: TimeFormatMode): string | null {
+function quotaResetLabel(
+  now: number,
+  resetsAt: string,
+  mode: ResetTimerDisplayMode,
+  timeFormat: TimeFormatMode
+): string | null {
   const reset = Date.parse(resetsAt)
   if (!Number.isFinite(reset)) return null
   const diff = reset - now
@@ -98,8 +103,12 @@ function quotaResetLabel(now: number, resetsAt: string, mode: ResetTimerDisplayM
   }
   const minutes = Math.ceil(diff / 60_000)
   const days = Math.floor(minutes / 1440)
-  const hours = Math.floor(minutes % 1440 / 60)
-  return days > 0 ? `距重置 ${days} 天 ${hours} 小时` : hours > 0 ? `距重置 ${hours} 小时 ${minutes % 60} 分钟` : `距重置 ${minutes} 分钟`
+  const hours = Math.floor((minutes % 1440) / 60)
+  return days > 0
+    ? `距重置 ${days} 天 ${hours} 小时`
+    : hours > 0
+      ? `距重置 ${hours} 小时 ${minutes % 60} 分钟`
+      : `距重置 ${minutes} 分钟`
 }
 
 type Props = {
@@ -144,12 +153,64 @@ export function ChatgptCardsView({
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
+  const [resetBusyKey, setResetBusyKey] = useState<string | null>(null)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
+  const [resetDone, setResetDone] = useState<string[]>([])
+  const [pendingReset, setPendingReset] = useState<string[]>([])
+  const resetLock = useRef(false)
+
+  useEffect(() => {
+    setResetDone([])
+  }, [lastUpdatedAt])
+
+  const useResetCredit = async (account: ChatgptAccountCard) => {
+    if (!isTauri() || resetLock.current || busy || loading) return
+    resetLock.current = true
+    setResetBusyKey(account.entryKey)
+    setActionError(null)
+    setResetMessage(null)
+    let submitted = false
+    try {
+      const prepared = await invoke<{ identity: string; availableCount: number; pending: boolean }>(
+        "codex_prepare_reset",
+        { entryKey: account.entryKey }
+      )
+      if (!prepared.pending && prepared.availableCount === 0) {
+        setResetMessage("当前没有可用的重置卡，正在刷新数量。")
+        onAccountsChanged?.()
+        return
+      }
+      await invoke("pause_panel_auto_hide", { paused: true })
+      const confirmed = window.confirm(
+        prepared.pending
+          ? `核对 ${account.title} 上次未完成的重置请求？将复用原请求编号，不发起新的重置。`
+          : `确定为 ${account.title} 使用 1 张额度重置卡？当前可用 ${prepared.availableCount} 张。此操作会消耗该账号的重置卡，由服务端决定可重置的额度窗口。`
+      )
+      if (!confirmed) return
+      submitted = true
+      const result = await invoke<{ outcome: string; message: string }>("codex_consume_reset", {
+        entryKey: account.entryKey,
+        expectedIdentity: prepared.identity
+      })
+      setResetMessage(result.message)
+      setPendingReset((keys) => keys.filter((key) => key !== account.entryKey))
+      setResetDone((keys) => [...keys, account.entryKey])
+      onAccountsChanged?.()
+    } catch (e) {
+      if (submitted) setPendingReset((keys) => [...new Set([...keys, account.entryKey])])
+      setActionError(typeof e === "string" ? e : "读取或使用重置卡失败，请先刷新后重试。")
+    } finally {
+      void invoke("pause_panel_auto_hide", { paused: false }).catch(() => {})
+      resetLock.current = false
+      setResetBusyKey(null)
+    }
+  }
 
   const changeAccount = async (
     command: "codex_set_tray_account" | "codex_remove_account",
     entryKey: string
   ) => {
-    if (!isTauri() || busy || loading) return
+    if (!isTauri() || busy || loading || resetLock.current) return
     if (
       command === "codex_remove_account" &&
       !window.confirm("移除此应用中的导入账号？CLIProxy 原文件和本机 Codex 登录保持不变。")
@@ -228,6 +289,14 @@ export function ChatgptCardsView({
           </span>
         </div>
       )}
+      {resetMessage && (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-2 text-[11px] text-emerald-200"
+        >
+          {resetMessage}
+        </p>
+      )}
 
       {accounts.length === 0 && (
         <p className="px-2 py-4 text-center text-xs text-white/50">
@@ -262,8 +331,17 @@ export function ChatgptCardsView({
                   : "暂无额度数据"
           const isTray = payload.trayEntryKey === account.entryKey
           const extras = account.lines.filter(
-            (l) => l.type !== "progress" && l.label !== "__chatgpt_v1"
+            (l) =>
+              l.type !== "progress" && l.label !== "__chatgpt_v1" && l.label !== "Rate Limit Resets"
           )
+          const resetLine = account.lines.find(
+            (line) => line.type === "text" && line.label === "Rate Limit Resets"
+          )
+          const resetCount =
+            resetLine?.type === "text" && /^\d+ available$/.test(resetLine.value)
+              ? Number.parseInt(resetLine.value, 10)
+              : null
+          const hasPending = pendingReset.includes(account.entryKey)
           return (
             <article
               key={account.entryKey}
@@ -333,6 +411,43 @@ export function ChatgptCardsView({
               </header>
 
               <div className="flex-1 space-y-2 border-t border-white/8 px-3 pb-3 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/40 px-2.5 py-2">
+                  <span className="text-[11px] text-white/50">
+                    额度重置卡{" "}
+                    <span className="ml-1 tabular-nums text-white/85">
+                      {resetCount == null ? "待查询" : `${resetCount} 张`}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className={actionClass}
+                    disabled={
+                      !isTauri() ||
+                      busy ||
+                      resetBusyKey !== null ||
+                      loading ||
+                      Boolean(account.error) ||
+                      resetDone.includes(account.entryKey) ||
+                      (resetCount === 0 && !hasPending)
+                    }
+                    aria-label={`${hasPending ? "核对重置结果" : "使用重置卡"} ${account.title}`}
+                    onClick={() => void useResetCredit(account)}
+                  >
+                    {resetBusyKey === account.entryKey
+                      ? "处理中…"
+                      : resetDone.includes(account.entryKey)
+                        ? "等待刷新"
+                        : hasPending
+                          ? "核对重置结果"
+                          : resetCount === 0
+                            ? "无可用重置卡"
+                            : resetCount == null
+                              ? "查看重置卡"
+                              : "使用重置卡"}
+                  </Button>
+                </div>
                 <div
                   className="flex items-center gap-2 py-0.5 text-[12px]"
                   aria-label={

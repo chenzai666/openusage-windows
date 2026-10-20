@@ -14,6 +14,8 @@ static STORE_LOCK: Mutex<()> = Mutex::new(());
 struct AccountStore {
     accounts: Vec<ImportedAccount>,
     tray_entry_key: Option<String>,
+    #[serde(default)]
+    pending_resets: std::collections::HashMap<String, String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -27,7 +29,7 @@ struct ImportedAccount {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountSummary {
-    entry_key: String,
+    pub entry_key: String,
     email_masked: String,
     selected: bool,
 }
@@ -201,7 +203,14 @@ fn normalize(value: &Value) -> Result<ImportedAccount, String> {
         .clone()
         .or(email)
         .unwrap_or_else(|| access.clone());
-    let entry_key = format!("cliproxy-{:x}", Sha256::digest(identity.as_bytes()));
+    let digest = Sha256::digest(identity.as_bytes());
+    let entry_key = format!(
+        "cliproxy-{}",
+        digest
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
     // Do not copy refresh_token: rotating the same token could log CLIProxy out.
     let auth = json!({ "tokens": { "access_token": access, "account_id": account_id } });
     Ok(ImportedAccount {
@@ -306,9 +315,76 @@ pub fn set_tray_account(root: &Path, entry_key: String) -> Result<(), String> {
 // Only exposed to the Codex plugin; credentials never become frontend probe output.
 pub fn plugin_accounts(root: &Path) -> Result<String, String> {
     let _guard = STORE_LOCK.lock().map_err(|_| "账号存储繁忙")?;
-    let mut value = serde_json::to_value(load(root)?).map_err(|_| "读取导入账号失败")?;
-    value["configured"] = Value::Bool(store_path(root).exists());
+    let store = load(root)?;
+    let value = json!({"accounts":store.accounts, "trayEntryKey":store.tray_entry_key, "configured":store_path(root).exists()});
     serde_json::to_string(&value).map_err(|_| "读取导入账号失败".into())
+}
+
+pub fn reset_auth(root: &Path, entry_key: &str) -> Result<Value, String> {
+    if entry_key != "local" {
+        let _guard = STORE_LOCK.lock().map_err(|_| "账号存储繁忙")?;
+        return load(root)?
+            .accounts
+            .into_iter()
+            .find(|a| a.entry_key == entry_key)
+            .map(|a| a.auth)
+            .ok_or_else(|| "导入账号已移除，请刷新后重试".into());
+    }
+    let paths = if let Some(home) = std::env::var_os("CODEX_HOME").filter(|v| !v.is_empty()) {
+        vec![PathBuf::from(home).join("auth.json")]
+    } else {
+        let home = dirs::home_dir().ok_or("无法解析用户目录")?;
+        vec![
+            home.join(".config/codex/auth.json"),
+            home.join(".codex/auth.json"),
+        ]
+    };
+    for path in paths {
+        if std::fs::metadata(&path)
+            .map(|m| m.len())
+            .unwrap_or(u64::MAX)
+            > MAX_DOCUMENT_BYTES as u64
+        {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(&path) {
+            if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                if let Ok(account) = normalize(&value) {
+                    return Ok(account.auth);
+                }
+            }
+        }
+    }
+    Err("未找到本机 Codex OAuth 登录，请先登录 Codex 或导入 CLIProxy 账号".into())
+}
+
+pub fn has_pending_reset(root: &Path, identity: &str) -> Result<bool, String> {
+    let _guard = STORE_LOCK.lock().map_err(|_| "账号存储繁忙")?;
+    Ok(load(root)?.pending_resets.contains_key(identity))
+}
+
+pub fn reset_request_id(root: &Path, identity: &str) -> Result<String, String> {
+    let _guard = STORE_LOCK.lock().map_err(|_| "账号存储繁忙")?;
+    let mut store = load(root)?;
+    if let Some(id) = store.pending_resets.get(identity) {
+        return Ok(id.clone());
+    }
+    if store.pending_resets.len() >= 64 {
+        return Err("未完成的重置请求过多，请先检查已有请求".into());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    store
+        .pending_resets
+        .insert(identity.to_string(), id.clone());
+    save(root, &store)?;
+    Ok(id)
+}
+
+pub fn finish_reset(root: &Path, identity: &str) -> Result<(), String> {
+    let _guard = STORE_LOCK.lock().map_err(|_| "账号存储繁忙")?;
+    let mut store = load(root)?;
+    store.pending_resets.remove(identity);
+    save(root, &store)
 }
 
 #[cfg(test)]

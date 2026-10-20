@@ -36,6 +36,16 @@ ChatGPT / Codex 面板沿用 Grok 的深色卡片设计：账号与套餐标签�
 
 ## 指标说明
 
+### 使用额度重置卡
+
+每张账号卡片提供「额度重置卡」操作区，显示可用张数。有卡时点击 **使用重置卡**，程序先重新查询服务端可用数量，再弹出账号与消耗确认。确认后使用一张重置卡，处理结果显示在面板内，并自动刷新用量。
+
+重置接口遵循 OpenAI Codex 官方实现：`GET /backend-api/wham/rate-limit-reset-credits` 查询，`POST /backend-api/wham/rate-limit-reset-credits/consume` 使用，提交 `redeem_request_id` 幂等编号。支持 `reset`、`nothing_to_reset`、`no_credit`、`already_redeemed` 四种结果。具体重置窗口由服务端决定。
+
+该操作会消耗账号资源，必须逐次确认；不会定时或自动使用。提交过程中禁用重复点击。网络超时等结果不明时保留加密的请求编号，提供「核对重置结果」，后续重试复用原编号，避免重复消耗。确认后如果账号身份已变化，后端拒绝提交。
+
+接口依据：[官方 App Server 文档](https://developers.openai.com/codex/app-server)、[官方后端客户端实现](https://github.com/openai/codex/blob/main/codex-rs/backend-client/src/client/rate_limit_resets.rs)。
+
 订阅额度来自现有 Codex 用量接口；本机今日/昨日/近 30 天费用与趋势来自本机 Codex 会话统计，仅展示在本机账号卡片中。导入账号的卡片只展示该账号接口实际返回的额度和积分，避免混入本机会话费用。
 
 圆点表示剩余额度，进度条遵循设置中的「已用 / 剩余」模式。缺失或无效的额度显示为暂无数据。刷新中保留已有内容，刷新按钮遵循原有冷却时间；导入、移除和托盘选择完成后触发独立刷新。

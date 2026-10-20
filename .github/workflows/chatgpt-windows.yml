@@ -7,6 +7,7 @@ on:
       - "src/components/chatgpt-*"
       - "src/components/codex-*"
       - "src-tauri/src/codex_accounts.rs"
+      - "src-tauri/src/codex_resets.rs"
       - "plugins/codex/**"
       - ".github/workflows/chatgpt-windows.yml"
 
@@ -40,6 +41,8 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo test --release --locked --lib codex_accounts::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --release --locked --lib codex_resets::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --release --locked --lib panel::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

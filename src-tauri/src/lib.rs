@@ -2,6 +2,7 @@
 mod app_nap;
 mod config;
 mod codex_accounts;
+mod codex_resets;
 mod grok_accounts;
 mod local_http_api;
 mod log_path;
@@ -212,6 +213,20 @@ fn hide_panel(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn reanchor_panel(app_handle: tauri::AppHandle) {
     panel::reanchor_panel(&app_handle);
+}
+
+#[tauri::command]
+async fn codex_prepare_reset(state: tauri::State<'_, Mutex<AppState>>, entry_key: String) -> Result<codex_resets::ResetPreparation, String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || codex_resets::prepare(&root, &entry_key))
+        .await.map_err(|_| "读取重置卡任务失败")?
+}
+
+#[tauri::command]
+async fn codex_consume_reset(state: tauri::State<'_, Mutex<AppState>>, entry_key: String, expected_identity: String) -> Result<codex_resets::ResetResult, String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || codex_resets::consume(&root, &entry_key, &expected_identity))
+        .await.map_err(|_| "额度重置任务失败，请先刷新查看状态")?
 }
 
 #[tauri::command]
@@ -665,6 +680,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            codex_prepare_reset,
+            codex_consume_reset,
             pause_panel_auto_hide,
             codex_list_accounts,
             codex_import_accounts,

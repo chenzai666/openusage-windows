@@ -70,6 +70,95 @@ describe("ChatGPT cards", () => {
     expect(screen.queryByText(/billing/)).not.toBeInTheDocument()
   })
 
+  it("confirms before consuming a reset credit and refreshes after success", async () => {
+    vi.mocked(isTauri).mockReturnValue(true)
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true)
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "codex_prepare_reset"
+        ? { identity: "account-hash", availableCount: 1, pending: false }
+        : command === "codex_consume_reset"
+          ? { outcome: "reset", message: "额度重置成功，已使用 1 张重置卡，正在刷新用量。" }
+          : undefined
+    )
+    const changed = vi.fn()
+    const account = {
+      ...payload.accounts[0],
+      lines: [
+        ...payload.accounts[0].lines,
+        { type: "text" as const, label: "Rate Limit Resets", value: "1 available" }
+      ]
+    }
+    render(
+      <ChatgptCardsView
+        {...base}
+        payload={{ ...payload, accounts: [account] }}
+        onAccountsChanged={changed}
+      />
+    )
+    expect(screen.getByText("1 张")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: `使用重置卡 ${account.title}` }))
+    await vi.waitFor(() => expect(changed).toHaveBeenCalledOnce())
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("使用 1 张额度重置卡"))
+    expect(invoke).toHaveBeenCalledWith("codex_consume_reset", {
+      entryKey: account.entryKey,
+      expectedIdentity: "account-hash"
+    })
+    expect(screen.getByRole("status")).toHaveTextContent("额度重置成功")
+    expect(screen.getByRole("button", { name: `使用重置卡 ${account.title}` })).toBeDisabled()
+  })
+
+  it("cancelling confirmation never consumes a reset card", async () => {
+    vi.mocked(isTauri).mockReturnValue(true)
+    vi.spyOn(window, "confirm").mockReturnValue(false)
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "codex_prepare_reset"
+        ? { identity: "hash", availableCount: 2, pending: false }
+        : undefined
+    )
+    render(<ChatgptCardsView {...base} />)
+    fireEvent.click(screen.getByRole("button", { name: `使用重置卡 ${payload.accounts[0].title}` }))
+    await vi.waitFor(() => expect(window.confirm).toHaveBeenCalledOnce())
+    expect(
+      vi.mocked(invoke).mock.calls.some(([command]) => command === "codex_consume_reset")
+    ).toBe(false)
+  })
+
+  it("revalidates availability and never POSTs without a credit", async () => {
+    vi.mocked(isTauri).mockReturnValue(true)
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    vi.mocked(invoke).mockResolvedValue({ identity: "hash", availableCount: 0, pending: false })
+    render(<ChatgptCardsView {...base} />)
+    fireEvent.click(screen.getByRole("button", { name: `使用重置卡 ${payload.accounts[0].title}` }))
+    expect(await screen.findByRole("status")).toHaveTextContent("没有可用的重置卡")
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(
+      vi.mocked(invoke).mock.calls.some(([command]) => command === "codex_consume_reset")
+    ).toBe(false)
+  })
+
+  it("prevents duplicate clicks and provides pending-request recovery after timeout", async () => {
+    vi.mocked(isTauri).mockReturnValue(true)
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "codex_prepare_reset")
+        return { identity: "hash", availableCount: 1, pending: false }
+      if (command === "codex_consume_reset") throw "重置请求结果待确认，请先刷新"
+    })
+    render(<ChatgptCardsView {...base} />)
+    const button = screen.getByRole("button", { name: `使用重置卡 ${payload.accounts[0].title}` })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(
+      await screen.findByRole("button", { name: `核对重置结果 ${payload.accounts[0].title}` })
+    ).toBeEnabled()
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "codex_consume_reset")
+    ).toHaveLength(1)
+    expect(screen.getAllByRole("alert").some((e) => e.textContent?.includes("结果待确认"))).toBe(
+      true
+    )
+  })
+
   it("honors remaining mode and reset time toggle", () => {
     const toggle = vi.fn()
     render(<ChatgptCardsView {...base} displayMode="left" onResetTimerDisplayModeToggle={toggle} />)
