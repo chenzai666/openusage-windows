@@ -8,6 +8,10 @@
 
 ![OpenUsage 截图](screenshot.png)
 
+## ChatGPT / Codex 卡片与 CLIProxy 导入
+
+ChatGPT / Codex 用量面板支持 Grok 同款深色账号卡片与多列工作台，可直接批量导入 CLIProxy 的 Codex OAuth 账号 JSON。导入副本由 Windows DPAPI 加密，不覆盖 CLIProxy 或本机 Codex 的登录文件。详细步骤与凭据续期说明见 [ChatGPT / CLIProxy 使用说明](docs/providers/chatgpt-cliproxy.md)。
+
 ## 功能
 
 - **系统托盘应用** — 点击托盘图标打开用量面板

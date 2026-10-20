@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "codex",
   "name": "Codex",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "entry": "plugin.js",
   "icon": "icon.svg",
   "brandColor": "#74AA9C",
@@ -11,6 +11,7 @@
     { "label": "Usage dashboard", "url": "https://chatgpt.com/codex/settings/usage" }
   ],
   "lines": [
+    { "type": "text", "label": "__chatgpt_v1", "scope": "overview" },
     { "type": "progress", "label": "Session", "scope": "overview", "primaryOrder": 1 },
     { "type": "progress", "label": "Weekly", "scope": "overview", "period": "weekly" },
     { "type": "progress", "label": "Spark", "scope": "detail" },

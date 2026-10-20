@@ -654,6 +654,16 @@ pub(crate) fn inject_host_api_with_deadline<'js>(
     inject_ls(ctx, &host, plugin_id)?;
     inject_ccusage(ctx, &host, plugin_id, deadline)?;
 
+    if plugin_id == "codex" {
+        let accounts = Object::new(ctx.clone())?;
+        let root = app_data_dir.to_path_buf();
+        accounts.set("load", Function::new(ctx.clone(), move |inner: Ctx<'_>| -> rquickjs::Result<String> {
+            crate::codex_accounts::plugin_accounts(&root)
+                .map_err(|e| Exception::throw_message(&inner, &e))
+        })?)?;
+        host.set("codexAccounts", accounts)?;
+    }
+
     probe_ctx.set("host", host)?;
     globals.set("__openusage_ctx", probe_ctx)?;
 
@@ -3066,6 +3076,21 @@ mod tests {
             "__OPENUSAGE_ENV_END__",
         );
         assert_eq!(value.as_deref(), Some("sk-test-key-12345"));
+    }
+
+    #[test]
+    fn codex_account_bridge_is_plugin_scoped() {
+        for plugin_id in ["codex", "grok", "test"] {
+            let rt = Runtime::new().expect("runtime");
+            let ctx = Context::full(&rt).expect("context");
+            ctx.with(|ctx| {
+                inject_host_api(&ctx, plugin_id, &std::env::temp_dir(), "0.0.0")
+                    .expect("inject host api");
+                let available: bool = ctx.eval("typeof __openusage_ctx.host.codexAccounts === 'object'")
+                    .expect("bridge visibility");
+                assert_eq!(available, plugin_id == "codex");
+            });
+        }
     }
 
     #[test]

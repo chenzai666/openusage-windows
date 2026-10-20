@@ -110,6 +110,22 @@ function App() {
     onProbeResult: handleProbeResult,
   })
 
+  const pendingCodexImportRef = useRef(false)
+  const handleCodexAccountsChanged = useCallback(() => {
+    if (pluginStates.codex?.loading) {
+      pendingCodexImportRef.current = true
+    } else {
+      handleRetryPlugin("codex", true)
+    }
+  }, [pluginStates.codex?.loading, handleRetryPlugin])
+
+  useEffect(() => {
+    if (pendingCodexImportRef.current && !pluginStates.codex?.loading) {
+      pendingCodexImportRef.current = false
+      handleRetryPlugin("codex", true)
+    }
+  }, [pluginStates.codex?.loading, handleRetryPlugin])
+
   const { scheduleTrayIconUpdate, traySettingsPreview } = useTrayIcon({
     pluginsMeta,
     pluginSettings,
@@ -321,6 +337,7 @@ function App() {
         onStartOnLoginChange: handleStartOnLoginChange,
         onGrokOnlyModeChange: handleGrokOnlyModeChange,
         onGrokAccountsChanged: () => handleRetryPlugin("grok"),
+        onCodexAccountsChanged: handleCodexAccountsChanged,
         autoUpdateNextAt,
       }}
     />

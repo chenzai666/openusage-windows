@@ -41,6 +41,7 @@ export type AppContentActionProps = {
   onStartOnLoginChange: (value: boolean) => void
   onGrokOnlyModeChange?: (value: boolean) => void
   onGrokAccountsChanged?: () => void
+  onCodexAccountsChanged?: () => void
   autoUpdateNextAt?: number | null
 }
 
@@ -66,13 +67,14 @@ export function AppContent({
   onStartOnLoginChange,
   onGrokOnlyModeChange,
   onGrokAccountsChanged,
+  onCodexAccountsChanged,
   autoUpdateNextAt = null,
 }: AppContentProps) {
-  const { activeView, grokWorkbench, toggleGrokWorkbench } = useAppUiStore(
+  const { activeView, providerWorkbench, toggleProviderWorkbench } = useAppUiStore(
     useShallow((state) => ({
       activeView: state.activeView,
-      grokWorkbench: state.grokWorkbench,
-      toggleGrokWorkbench: state.toggleGrokWorkbench,
+      providerWorkbench: state.providerWorkbench,
+      toggleProviderWorkbench: state.toggleProviderWorkbench,
     }))
   )
 
@@ -106,14 +108,14 @@ export function AppContent({
     return (
       <OverviewPage
         plugins={displayPlugins}
+        onCodexAccountsChanged={onCodexAccountsChanged}
         onRetryPlugin={onRetryPlugin}
-        onOpenGrokSettings={() => {
-          // Jump to settings where Grok account editor lives
+        onOpenProviderSettings={() => {
           useAppUiStore.getState().setActiveView("settings")
         }}
         autoUpdateNextAt={autoUpdateNextAt}
-        grokWorkbench={grokWorkbench}
-        onToggleGrokWorkbench={toggleGrokWorkbench}
+        providerWorkbench={providerWorkbench}
+        onToggleProviderWorkbench={toggleProviderWorkbench}
         displayMode={displayMode}
         resetTimerDisplayMode={resetTimerDisplayMode}
         timeFormatMode={timeFormatMode}
@@ -150,6 +152,7 @@ export function AppContent({
         grokOnlyMode={grokOnlyMode}
         onGrokOnlyModeChange={onGrokOnlyModeChange}
         onGrokAccountsChanged={onGrokAccountsChanged}
+        onCodexAccountsChanged={onCodexAccountsChanged}
       />
     )
   }
@@ -162,6 +165,10 @@ export function AppContent({
     <ProviderDetailPage
       plugin={selectedPlugin}
       onRetry={handleRetry}
+      onAccountsChanged={selectedPlugin?.meta.id === "codex" ? onCodexAccountsChanged : undefined}
+      autoUpdateNextAt={autoUpdateNextAt}
+      providerWorkbench={providerWorkbench}
+      onToggleProviderWorkbench={selectedPlugin && ["grok", "codex"].includes(selectedPlugin.meta.id) ? toggleProviderWorkbench : undefined}
       displayMode={displayMode}
       resetTimerDisplayMode={resetTimerDisplayMode}
       timeFormatMode={timeFormatMode}

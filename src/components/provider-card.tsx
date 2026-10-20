@@ -18,8 +18,10 @@ import { calculateDeficit, calculatePaceStatus, type PaceStatus } from "@/lib/pa
 import { buildPaceDetailText, formatDeficitText, formatRunsOutText, getPaceStatusText } from "@/lib/pace-tooltip"
 import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipText } from "@/lib/reset-tooltip"
 import { extractGrokPayload, GrokCardsView } from "@/components/grok-cards-view"
+import { ChatgptCardsView, extractChatgptPayload } from "@/components/chatgpt-cards-view"
 
 interface ProviderCardProps {
+  providerId?: string
   name: string
   plan?: string
   links?: PluginLink[]
@@ -31,11 +33,12 @@ interface ProviderCardProps {
   lastManualRefreshAt?: number | null
   lastUpdatedAt?: number | null
   onRetry?: () => void
-  /** Open Grok account settings (design footer gear). */
-  onOpenGrokSettings?: () => void
+  /** Open provider account settings (design footer gear). */
+  onOpenProviderSettings?: () => void
+  onAccountsChanged?: () => void
   autoUpdateNextAt?: number | null
-  grokWorkbench?: boolean
-  onToggleGrokWorkbench?: () => void
+  providerWorkbench?: boolean
+  onToggleProviderWorkbench?: () => void
   scopeFilter?: "overview" | "all"
   displayMode: DisplayMode
   resetTimerDisplayMode?: ResetTimerDisplayMode
@@ -100,6 +103,7 @@ function formatRelativeTime(diffMs: number): string {
 }
 
 export function ProviderCard({
+  providerId,
   name,
   plan,
   links = [],
@@ -111,10 +115,11 @@ export function ProviderCard({
   lastManualRefreshAt,
   lastUpdatedAt,
   onRetry,
-  onOpenGrokSettings,
+  onOpenProviderSettings,
+  onAccountsChanged,
   autoUpdateNextAt = null,
-  grokWorkbench = false,
-  onToggleGrokWorkbench,
+  providerWorkbench = false,
+  onToggleProviderWorkbench,
   scopeFilter = "all",
   displayMode,
   resetTimerDisplayMode = "relative",
@@ -129,6 +134,7 @@ export function ProviderCard({
 
   // Design-doc Grok multi-account cards (screenshot layout)
   const grokPayload = useMemo(() => extractGrokPayload(lines), [lines])
+  const chatgptPayload = useMemo(() => extractChatgptPayload(lines), [lines])
 
   // Filter lines based on scope - match by label since runtime lines can differ from manifest
   const overviewLabels = new Set(
@@ -141,9 +147,11 @@ export function ProviderCard({
     : skeletonLines.filter(line => line.scope === "overview")
   // Hide machine payload + when using Grok cards, skip legacy metric dump in overview
   const filteredLines = (scopeFilter === "all" ? lines : lines.filter(line => overviewLabels.has(line.label)))
-    .filter((line) => !(line.type === "text" && line.label === "__grok_v1"))
+    .filter((line) => !(line.type === "text" && (line.label === "__grok_v1" || line.label === "__chatgpt_v1")))
 
-  const hasResetCountdown = filteredLines.some(
+  const hasResetCountdown = (providerId === "codex" ? [
+    ...lines, ...(chatgptPayload?.accounts.flatMap((a) => a.lines) ?? []),
+  ] : filteredLines).some(
     (line) => line.type === "progress" && Boolean(line.resetsAt)
   )
 
@@ -192,6 +200,34 @@ export function ProviderCard({
       return `Available in ${minutes}m ${seconds}s`
     }
     return `Available in ${seconds}s`
+  }
+
+  if (providerId === "codex") {
+    return <>
+      <ChatgptCardsView
+        payload={chatgptPayload ?? { v: 1, trayEntryKey: "local", accounts: [{
+          entryKey: "local", title: "本机 Codex", source: "本机登录", plan: plan ?? null,
+          lines: lines.filter((l) => l.label !== "__chatgpt_v1"), error,
+        }] }}
+        loading={loading}
+        error={chatgptPayload ? error : null}
+        refreshDisabled={loading || inCooldown}
+        refreshHint={inCooldown ? formatRemainingTime() : undefined}
+        lastUpdatedAt={lastUpdatedAt}
+        autoUpdateNextAt={autoUpdateNextAt}
+        onRetry={onRetry}
+        onOpenSettings={onOpenProviderSettings}
+        onAccountsChanged={onAccountsChanged}
+        workbench={providerWorkbench}
+        onToggleWorkbench={onToggleProviderWorkbench}
+        displayMode={displayMode}
+        resetTimerDisplayMode={resetTimerDisplayMode}
+        timeFormatMode={timeFormatMode}
+        onResetTimerDisplayModeToggle={onResetTimerDisplayModeToggle}
+        now={now}
+      />
+      {showSeparator && <Separator />}
+    </>
   }
 
   return (
@@ -320,12 +356,12 @@ export function ProviderCard({
           <GrokCardsView
             payload={grokPayload}
             onRetry={onRetry}
-            onOpenSettings={onOpenGrokSettings}
+            onOpenSettings={onOpenProviderSettings}
             compact={scopeFilter === "overview"}
             lastUpdatedAt={lastUpdatedAt}
             autoUpdateNextAt={autoUpdateNextAt}
-            workbench={grokWorkbench}
-            onToggleWorkbench={onToggleGrokWorkbench}
+            workbench={providerWorkbench}
+            onToggleWorkbench={onToggleProviderWorkbench}
           />
         )}
 

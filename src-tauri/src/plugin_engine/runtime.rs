@@ -70,11 +70,15 @@ pub struct PluginOutput {
 }
 
 pub fn run_probe(plugin: &LoadedPlugin, app_data_dir: &PathBuf, app_version: &str) -> PluginOutput {
+    // Imported Codex accounts are bounded to 20, each with a 10s usage timeout.
+    let imported = if plugin.manifest.id == "codex" {
+        crate::codex_accounts::list_accounts(app_data_dir).map(|a| a.len().min(20)).unwrap_or(0)
+    } else { 0 };
     run_probe_with_timeout(
         plugin,
         app_data_dir,
         app_version,
-        Duration::from_secs(PROBE_TIMEOUT_SECS),
+        Duration::from_secs(PROBE_TIMEOUT_SECS + imported as u64 * 12),
     )
 }
 
