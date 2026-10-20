@@ -199,10 +199,16 @@ fn normalize(value: &Value) -> Result<ImportedAccount, String> {
         .and_then(|s| s.split_once('@'))
         .map(|(user, domain)| format!("{}***@{}", user.chars().take(2).collect::<String>(), domain))
         .unwrap_or_else(|| "CLIProxy 账号".into());
-    let identity = account_id
-        .clone()
-        .or(email)
-        .unwrap_or_else(|| access.clone());
+    let principal = text(&access_claims, "sub")
+        .or_else(|| text(&id_claims, "sub"))
+        .or_else(|| email.clone().map(|email| email.to_lowercase()));
+    let identity = match (&account_id, &principal) {
+        (Some(account), Some(user)) => format!("{account}:{user}"),
+        _ => account_id
+            .clone()
+            .or(principal.clone())
+            .unwrap_or_else(|| access.clone()),
+    };
     let digest = Sha256::digest(identity.as_bytes());
     let entry_key = format!(
         "cliproxy-{}",
@@ -212,7 +218,7 @@ fn normalize(value: &Value) -> Result<ImportedAccount, String> {
             .collect::<String>()
     );
     // Do not copy refresh_token: rotating the same token could log CLIProxy out.
-    let auth = json!({ "tokens": { "access_token": access, "account_id": account_id } });
+    let auth = json!({ "tokens": { "access_token": access, "account_id": account_id, "principal": principal } });
     Ok(ImportedAccount {
         entry_key,
         email_masked,
@@ -409,6 +415,13 @@ mod tests {
         let b = normalize(&json!({"access_token":"new", "account_id":"a"})).unwrap();
         assert_eq!(a.entry_key, b.entry_key);
         assert!(!a.entry_key.contains("old"));
+        let first_user =
+            normalize(&json!({"access_token":"a", "account_id":"team", "email":"a@example.com"}))
+                .unwrap();
+        let second_user =
+            normalize(&json!({"access_token":"b", "account_id":"team", "email":"b@example.com"}))
+                .unwrap();
+        assert_ne!(first_user.entry_key, second_user.entry_key);
     }
 
     #[test]
@@ -445,6 +458,7 @@ mod tests {
         let input = json!({"type":"codex", "access_token":"private-test-token", "account_id":"a", "email":"demo@example.com"});
         assert_eq!(import_accounts(&root, vec![input.to_string()]).unwrap(), 1);
         assert_eq!(import_accounts(&root, vec![input.to_string()]).unwrap(), 1);
+        assert!(import_accounts(&root, vec![input.to_string(), "invalid JSON".into()]).is_err());
         let summaries = list_accounts(&root).unwrap();
         assert_eq!(summaries.len(), 1);
         assert!(!serde_json::to_string(&summaries)

@@ -104,4 +104,18 @@ describe("CLIProxy Codex imports", () => {
     const result = (await load()).probe(ctx)
     expect(resultPayload(result).accounts).toEqual([])
   })
+
+  it("does not resurrect removed imports when the local login is expired", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.writeText(
+      "~/.codex/auth.json",
+      JSON.stringify({ tokens: { access_token: "expired" } })
+    )
+    ctx.host.codexAccounts = { load: () => JSON.stringify({ accounts: [], configured: true }) }
+    ctx.host.http.request.mockReturnValue({ status: 401, headers: {}, bodyText: "" })
+    const cards = resultPayload((await load()).probe(ctx)).accounts
+    expect(cards).toHaveLength(1)
+    expect(cards[0].entryKey).toBe("local")
+    expect(cards[0].error).toBeTruthy()
+  })
 })

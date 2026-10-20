@@ -25,10 +25,11 @@ pub struct ResetResult {
 
 fn identity(auth: &Value) -> Result<String, String> {
     let tokens = &auth["tokens"];
-    let id = tokens["account_id"]
+    let user = tokens["principal"]
         .as_str()
         .or_else(|| tokens["access_token"].as_str())
         .ok_or("账号登录无效，请重新导入或登录")?;
+    let id = format!("{}:{user}", tokens["account_id"].as_str().unwrap_or(""));
     Ok(Sha256::digest(id.as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -212,12 +213,17 @@ mod tests {
 
     #[test]
     fn identity_binds_reset_to_account_not_a_rotating_token() {
-        let first = json!({"tokens":{"account_id":"a", "access_token":"old"}});
-        let updated = json!({"tokens":{"account_id":"a", "access_token":"new"}});
+        let first = json!({"tokens":{"account_id":"a", "principal":"user", "access_token":"old"}});
+        let updated =
+            json!({"tokens":{"account_id":"a", "principal":"user", "access_token":"new"}});
         assert_eq!(identity(&first).unwrap(), identity(&updated).unwrap());
         assert_ne!(
             identity(&first).unwrap(),
-            identity(&json!({"tokens":{"account_id":"b"}})).unwrap()
+            identity(&json!({"tokens":{"account_id":"b", "principal":"user"}})).unwrap()
+        );
+        assert_ne!(
+            identity(&first).unwrap(),
+            identity(&json!({"tokens":{"account_id":"a", "principal":"other-user"}})).unwrap()
         );
     }
 

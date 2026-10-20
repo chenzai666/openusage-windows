@@ -970,8 +970,8 @@
     if (!imported || !Array.isArray(imported.accounts) || imported.accounts.length === 0) {
       if (imported && imported.configured) {
         try { return probeLocal(ctx) } catch (e) {
-          if (e !== ERR_NOT_LOGGED_IN) throw e
-          return { plan: null, lines: [ctx.line.text({ label: "__chatgpt_v1", value: JSON.stringify({ v: 1, accounts: [], trayEntryKey: "" }) })] }
+          const accounts = e === ERR_NOT_LOGGED_IN ? [] : [{ entryKey: "local", title: "本机 Codex", source: "本机登录", plan: null, lines: [], error: String(e) }]
+          return { plan: null, lines: [ctx.line.text({ label: "__chatgpt_v1", value: JSON.stringify({ v: 1, accounts, trayEntryKey: accounts.length ? "local" : "" }) })] }
         }
       }
       return probeLocal(ctx)
