@@ -6,6 +6,35 @@
 
 use tauri::{AppHandle, Emitter, Manager, Position, Size, WebviewWindow};
 
+static AUTO_HIDE_PAUSED_UNTIL: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+pub fn pause_auto_hide(paused: bool) {
+    if let Ok(mut until) = AUTO_HIDE_PAUSED_UNTIL.lock() {
+        // A bounded lease also recovers if the webview closes during a picker.
+        *until = paused.then(|| std::time::Instant::now() + std::time::Duration::from_secs(300));
+    }
+}
+
+fn auto_hide_paused() -> bool {
+    AUTO_HIDE_PAUSED_UNTIL.lock().ok().and_then(|until| *until)
+        .is_some_and(|until| until > std::time::Instant::now())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_picker_auto_hide_lease_resumes_and_expires() {
+        pause_auto_hide(true);
+        assert!(auto_hide_paused());
+        pause_auto_hide(false);
+        assert!(!auto_hide_paused());
+        *AUTO_HIDE_PAUSED_UNTIL.lock().unwrap() = Some(std::time::Instant::now());
+        assert!(!auto_hide_paused());
+    }
+}
+
 fn monitor_contains_physical_point(
     origin_x: f64,
     origin_y: f64,
@@ -207,7 +236,7 @@ pub fn init(app_handle: &tauri::AppHandle) -> tauri::Result<()> {
                 std::thread::sleep(std::time::Duration::from_millis(280));
                 if let Some(win) = handle.get_webview_window("main") {
                     // Only hide if still unfocused (user didn't re-focus / drag).
-                    if !win.is_focused().unwrap_or(true) {
+                    if !auto_hide_paused() && !win.is_focused().unwrap_or(true) {
                         let _ = win.hide();
                     }
                 }

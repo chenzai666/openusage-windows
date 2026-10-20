@@ -858,7 +858,9 @@
         }
       }
 
-      const tokenUsageResult = queryTokenUsage(ctx)
+      const tokenUsageResult = authState.source === "cliproxy"
+        ? { status: "unavailable" }
+        : queryTokenUsage(ctx)
       if (tokenUsageResult.status === "ok") {
         const tokenUsage = tokenUsageResult.data
         const now = new Date()
@@ -925,7 +927,7 @@
     throw ERR_NOT_LOGGED_IN
   }
 
-  function probe(ctx) {
+  function probeLocal(ctx) {
     const fileAuth = loadFileAuthCandidates(ctx)
     let lastAuthFallbackError = null
     for (let i = 0; i < fileAuth.candidates.length; i++) {
@@ -960,6 +962,57 @@
 
     ctx.host.log.error("probe failed: not logged in")
     throw ERR_NOT_LOGGED_IN
+  }
+
+  function probe(ctx) {
+    const imported = ctx.host.codexAccounts && typeof ctx.host.codexAccounts.load === "function"
+      ? ctx.util.tryParseJson(ctx.host.codexAccounts.load()) : null
+    if (!imported || !Array.isArray(imported.accounts) || imported.accounts.length === 0) {
+      if (imported && imported.configured) {
+        try { return probeLocal(ctx) } catch (e) {
+          if (e !== ERR_NOT_LOGGED_IN) throw e
+          return { plan: null, lines: [ctx.line.text({ label: "__chatgpt_v1", value: JSON.stringify({ v: 1, accounts: [], trayEntryKey: "" }) })] }
+        }
+      }
+      return probeLocal(ctx)
+    }
+
+    const accounts = []
+    try {
+      const local = probeLocal(ctx)
+      accounts.push({ entryKey: "local", title: "本机 Codex", source: "本机登录", plan: local.plan, lines: local.lines, error: null })
+    } catch (e) {
+      if (e !== ERR_NOT_LOGGED_IN) {
+        accounts.push({ entryKey: "local", title: "本机 Codex", source: "本机登录", plan: null, lines: [], error: String(e) })
+      }
+    }
+
+    for (const account of imported.accounts.slice(0, 20)) {
+      const card = { entryKey: account.entryKey, title: account.emailMasked || "CLIProxy 账号", source: "CLIProxy 导入", plan: null, lines: [], error: null }
+      try {
+        // Imported snapshots intentionally have no refresh token; CLIProxy keeps
+        // ownership of token rotation. No writes to the original auth files.
+        const result = probeWithAuthState(ctx, { auth: account.auth, source: "cliproxy" })
+        card.plan = result.plan
+        card.lines = result.lines
+      } catch (e) {
+        card.error = isAuthFallbackError(e)
+          ? "凭据已过期，请重新导入 CLIProxy 的最新账号 JSON"
+          : String(e)
+      }
+      accounts.push(card)
+    }
+
+    const selected = accounts.find((a) => a.entryKey === imported.trayEntryKey) || accounts[0]
+    // Only the selected account supplies tray metrics. The card payload contains
+    // display data only; never serialize auth/token objects into probe output.
+    return {
+      plan: selected.plan,
+      lines: (selected.error ? [] : selected.lines).concat([ctx.line.text({
+        label: "__chatgpt_v1",
+        value: JSON.stringify({ v: 1, accounts, trayEntryKey: selected.entryKey }),
+      })]),
+    }
   }
 
   globalThis.__openusage_plugin = { id: "codex", probe }

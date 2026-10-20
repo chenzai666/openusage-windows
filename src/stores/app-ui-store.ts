@@ -4,19 +4,19 @@ import type { ActiveView } from "@/components/side-nav"
 type AppUiStore = {
   activeView: ActiveView
   showAbout: boolean
-  /** Grok multi-column workbench (design doc fullscreen-ish panel). */
-  grokWorkbench: boolean
+  /** Shared Grok / ChatGPT multi-column workbench. */
+  providerWorkbench: boolean
   setActiveView: (view: ActiveView) => void
   setShowAbout: (value: boolean) => void
-  setGrokWorkbench: (value: boolean) => void
-  toggleGrokWorkbench: () => void
+  setProviderWorkbench: (value: boolean) => void
+  toggleProviderWorkbench: () => void
   resetState: () => void
 }
 
 const initialState = {
   activeView: "home" as ActiveView,
   showAbout: false,
-  grokWorkbench: false,
+  providerWorkbench: false,
 }
 
 export const useAppUiStore = create<AppUiStore>((set) => ({
@@ -24,11 +24,10 @@ export const useAppUiStore = create<AppUiStore>((set) => ({
   setActiveView: (view) =>
     set((s) => ({
       activeView: view,
-      // Leave workbench when navigating away from home overview.
-      grokWorkbench: view === "home" ? s.grokWorkbench : false,
+      providerWorkbench: view === s.activeView ? s.providerWorkbench : false,
     })),
   setShowAbout: (value) => set({ showAbout: value }),
-  setGrokWorkbench: (value) => set({ grokWorkbench: value }),
-  toggleGrokWorkbench: () => set((s) => ({ grokWorkbench: !s.grokWorkbench })),
+  setProviderWorkbench: (value) => set({ providerWorkbench: value }),
+  toggleProviderWorkbench: () => set((s) => ({ providerWorkbench: !s.providerWorkbench })),
   resetState: () => set(initialState),
 }))

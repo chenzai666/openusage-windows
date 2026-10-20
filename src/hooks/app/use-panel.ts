@@ -57,7 +57,7 @@ export function usePanel({
   const bottomEdgePhysRef = useRef<number | null>(null)
   /** Latest scheduled resize entry point (set by the resize effect). */
   const scheduleResizeRef = useRef<(() => void) | null>(null)
-  const grokWorkbench = useAppUiStore((s) => s.grokWorkbench)
+  const providerWorkbench = useAppUiStore((s) => s.providerWorkbench)
   const focusContainer = useCallback(() => {
     window.requestAnimationFrame(() => {
       containerRef.current?.focus({ preventScroll: true })
@@ -92,8 +92,8 @@ export function usePanel({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // Esc exits Grok workbench first; second Esc hides panel.
-        if (useAppUiStore.getState().grokWorkbench) {
-          useAppUiStore.getState().setGrokWorkbench(false)
+        if (useAppUiStore.getState().providerWorkbench) {
+          useAppUiStore.getState().setProviderWorkbench(false)
           return
         }
         invoke("hide_panel")
@@ -266,7 +266,7 @@ export function usePanel({
       if (cancelled || !containerRef.current) return
       const el = containerRef.current
       const factor = window.devicePixelRatio || 1
-      const workbench = useAppUiStore.getState().grokWorkbench
+      const workbench = useAppUiStore.getState().providerWorkbench
       const logicalWidth = workbench ? WORKBENCH_PANEL_WIDTH : PANEL_WIDTH
       const width = Math.ceil(logicalWidth * factor)
       const desiredHeightLogical = Math.max(1, el.scrollHeight)
@@ -368,13 +368,13 @@ export function usePanel({
       observer.disconnect()
     }
     // Re-run when workbench toggles so width/height caps update.
-  }, [grokWorkbench])
+  }, [providerWorkbench])
 
   // After switching provider/settings/workbench, wait for React layout then resize once.
   useEffect(() => {
     if (!isTauri()) return
     // Reset bottom lock when entering/leaving workbench so reanchor stays sane.
-    if (grokWorkbench) {
+    if (providerWorkbench) {
       bottomEdgePhysRef.current = null
     }
     let raf1 = 0
@@ -382,7 +382,7 @@ export function usePanel({
     raf1 = window.requestAnimationFrame(() => {
       raf2 = window.requestAnimationFrame(() => {
         scheduleResizeRef.current?.()
-        if (grokWorkbench) {
+        if (providerWorkbench) {
           void invoke("reanchor_panel").catch(() => {})
         }
       })
@@ -391,7 +391,7 @@ export function usePanel({
       window.cancelAnimationFrame(raf1)
       window.cancelAnimationFrame(raf2)
     }
-  }, [activeView, grokWorkbench])
+  }, [activeView, providerWorkbench])
 
   useEffect(() => {
     const el = scrollRef.current

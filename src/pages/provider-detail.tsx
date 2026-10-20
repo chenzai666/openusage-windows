@@ -5,6 +5,10 @@ import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/s
 interface ProviderDetailPageProps {
   plugin: PluginDisplayState | null
   onRetry?: () => void
+  onAccountsChanged?: () => void
+  autoUpdateNextAt?: number | null
+  providerWorkbench?: boolean
+  onToggleProviderWorkbench?: () => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
@@ -14,6 +18,10 @@ interface ProviderDetailPageProps {
 export function ProviderDetailPage({
   plugin,
   onRetry,
+  onAccountsChanged,
+  autoUpdateNextAt,
+  providerWorkbench,
+  onToggleProviderWorkbench,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode = "auto",
@@ -29,6 +37,7 @@ export function ProviderDetailPage({
 
   return (
     <ProviderCard
+      providerId={plugin.meta.id}
       name={plugin.meta.name}
       plan={plugin.data?.plan}
       links={plugin.meta.links}
@@ -40,8 +49,12 @@ export function ProviderDetailPage({
       lastManualRefreshAt={plugin.lastManualRefreshAt}
       lastUpdatedAt={plugin.lastUpdatedAt}
       onRetry={onRetry}
-      onOpenGrokSettings={
-        plugin.meta.id === "grok"
+      onAccountsChanged={onAccountsChanged}
+      autoUpdateNextAt={autoUpdateNextAt}
+      providerWorkbench={providerWorkbench}
+      onToggleProviderWorkbench={onToggleProviderWorkbench}
+      onOpenProviderSettings={
+        ["grok", "codex"].includes(plugin.meta.id)
           ? () => {
               // Lazy import store to avoid circular deps in tests
               void import("@/stores/app-ui-store").then(({ useAppUiStore }) => {

@@ -6,10 +6,11 @@ import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/s
 interface OverviewPageProps {
   plugins: PluginDisplayState[]
   onRetryPlugin?: (pluginId: string) => void
-  onOpenGrokSettings?: () => void
+  onOpenProviderSettings?: () => void
+  onCodexAccountsChanged?: () => void
   autoUpdateNextAt?: number | null
-  grokWorkbench?: boolean
-  onToggleGrokWorkbench?: () => void
+  providerWorkbench?: boolean
+  onToggleProviderWorkbench?: () => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
@@ -19,10 +20,11 @@ interface OverviewPageProps {
 export function OverviewPage({
   plugins,
   onRetryPlugin,
-  onOpenGrokSettings,
+  onOpenProviderSettings,
+  onCodexAccountsChanged,
   autoUpdateNextAt = null,
-  grokWorkbench = false,
-  onToggleGrokWorkbench,
+  providerWorkbench = false,
+  onToggleProviderWorkbench,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode = "auto",
@@ -39,6 +41,7 @@ export function OverviewPage({
         plugins.map((plugin, index) => (
           <ProviderCard
             key={plugin.meta.id}
+            providerId={plugin.meta.id}
             name={plugin.meta.name}
             plan={plugin.data?.plan}
             showSeparator={index < plugins.length - 1}
@@ -49,15 +52,14 @@ export function OverviewPage({
             lastManualRefreshAt={plugin.lastManualRefreshAt}
             lastUpdatedAt={plugin.lastUpdatedAt}
             onRetry={onRetryPlugin ? () => onRetryPlugin(plugin.meta.id) : undefined}
-            onOpenGrokSettings={
-              plugin.meta.id === "grok" ? onOpenGrokSettings : undefined
+            onOpenProviderSettings={
+              ["grok", "codex"].includes(plugin.meta.id) ? onOpenProviderSettings : undefined
             }
-            autoUpdateNextAt={
-              plugin.meta.id === "grok" ? autoUpdateNextAt : null
-            }
-            grokWorkbench={plugin.meta.id === "grok" ? grokWorkbench : false}
-            onToggleGrokWorkbench={
-              plugin.meta.id === "grok" ? onToggleGrokWorkbench : undefined
+            onAccountsChanged={plugin.meta.id === "codex" ? onCodexAccountsChanged : undefined}
+            autoUpdateNextAt={autoUpdateNextAt}
+            providerWorkbench={providerWorkbench}
+            onToggleProviderWorkbench={
+              ["grok", "codex"].includes(plugin.meta.id) ? onToggleProviderWorkbench : undefined
             }
             scopeFilter="overview"
             displayMode={displayMode}

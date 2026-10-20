@@ -41,6 +41,7 @@ import { getTimeFormatter } from "@/lib/reset-tooltip";
 import type { TraySettingsPreview } from "@/hooks/app/use-tray-icon";
 import { cn } from "@/lib/utils";
 import { GrokAccountsSection } from "@/components/grok-accounts-section";
+import { CodexAccountsSection } from "@/components/codex-accounts-section";
 
 interface PluginConfig {
   id: string;
@@ -290,6 +291,7 @@ interface SettingsPageProps {
   onGrokOnlyModeChange?: (value: boolean) => void;
   /** Re-probe Grok after account meta / login changes. */
   onGrokAccountsChanged?: () => void;
+  onCodexAccountsChanged?: () => void;
 }
 
 export function SettingsPage({
@@ -318,6 +320,7 @@ export function SettingsPage({
   grokOnlyMode = false,
   onGrokOnlyModeChange,
   onGrokAccountsChanged,
+  onCodexAccountsChanged,
 }: SettingsPageProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -623,6 +626,7 @@ export function SettingsPage({
       {(grokOnlyMode || plugins.some((p) => p.id === "grok" && p.enabled)) && (
         <GrokAccountsSection onAccountsChanged={onGrokAccountsChanged} />
       )}
+      {!grokOnlyMode && <CodexAccountsSection onAccountsChanged={onCodexAccountsChanged} />}
     </div>
   );
 }

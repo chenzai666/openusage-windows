@@ -133,3 +133,6 @@ GET http://127.0.0.1:6736/v1/usage
 ## 许可证
 
 [MIT](LICENSE) — 与上游 OpenUsage 相同。
+## ChatGPT / Codex 卡片与 CLIProxy 导入
+
+ChatGPT / Codex 用量面板支持 Grok 同款深色账号卡片与多列工作台，可直接批量导入 CLIProxy 的 Codex OAuth 账号 JSON。导入副本由 Windows DPAPI 加密，不覆盖 CLIProxy 或本机 Codex 的登录文件。详细步骤与凭据续期说明见 [ChatGPT / CLIProxy 使用说明](docs/providers/chatgpt-cliproxy.md)。

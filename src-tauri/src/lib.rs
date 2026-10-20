@@ -1,6 +1,7 @@
 #[cfg(target_os = "macos")]
 mod app_nap;
 mod config;
+mod codex_accounts;
 mod grok_accounts;
 mod local_http_api;
 mod log_path;
@@ -211,6 +212,35 @@ fn hide_panel(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn reanchor_panel(app_handle: tauri::AppHandle) {
     panel::reanchor_panel(&app_handle);
+}
+
+#[tauri::command]
+fn pause_panel_auto_hide(paused: bool) {
+    panel::pause_auto_hide(paused);
+}
+
+#[tauri::command]
+fn codex_list_accounts(state: tauri::State<'_, Mutex<AppState>>) -> Result<Vec<codex_accounts::AccountSummary>, String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    codex_accounts::list_accounts(&root)
+}
+
+#[tauri::command]
+fn codex_import_accounts(state: tauri::State<'_, Mutex<AppState>>, documents: Vec<String>) -> Result<usize, String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    codex_accounts::import_accounts(&root, documents)
+}
+
+#[tauri::command]
+fn codex_remove_account(state: tauri::State<'_, Mutex<AppState>>, entry_key: String) -> Result<(), String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    codex_accounts::remove_account(&root, &entry_key)
+}
+
+#[tauri::command]
+fn codex_set_tray_account(state: tauri::State<'_, Mutex<AppState>>, entry_key: String) -> Result<(), String> {
+    let root = state.lock().map_err(|_| "state lock poisoned")?.app_data_dir.clone();
+    codex_accounts::set_tray_account(&root, entry_key)
 }
 
 #[tauri::command]
@@ -635,6 +665,11 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            pause_panel_auto_hide,
+            codex_list_accounts,
+            codex_import_accounts,
+            codex_remove_account,
+            codex_set_tray_account,
             init_panel,
             hide_panel,
             reanchor_panel,

@@ -42,6 +42,9 @@ regex-lite = "0.1.9"
 aes-gcm = "0.10.3"
 sha2 = "0.11"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_Foundation"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 libc = "0.2"
